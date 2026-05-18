@@ -82,11 +82,11 @@ pub fn connect(addr: Address) !Stream {
 }
 
 pub fn connectWithTimeout(addr: Address, timeout_ms: u64) !Stream {
-    if (builtin.os.tag == .windows) return connect(addr);
-    return addr.connect(std.Options.debug_io, .{
-        .mode = .stream,
-        .timeout = timeoutFromMilliseconds(timeout_ms),
-    });
+    if (timeout_ms == 0) return connect(addr);
+    return switch (builtin.os.tag) {
+        .linux => connectWithTimeoutLinux(addr, timeout_ms),
+        else => connect(addr),
+    };
 }
 
 pub fn close(stream: Stream) void {
@@ -147,13 +147,85 @@ fn addressToPosix(addr: Address, storage: *PosixAddress) std.posix.socklen_t {
     };
 }
 
-fn timeoutFromMilliseconds(timeout_ms: u64) std.Io.Timeout {
-    if (timeout_ms == 0) return .none;
-    const clamped = std.math.cast(i64, timeout_ms) orelse std.math.maxInt(i64);
-    return .{
-        .duration = .{
-            .raw = std.Io.Duration.fromMilliseconds(clamped),
-            .clock = .awake,
-        },
+fn connectWithTimeoutLinux(addr: Address, timeout_ms: u64) !Stream {
+    const socket_type = std.posix.SOCK.STREAM | std.posix.SOCK.CLOEXEC | std.posix.SOCK.NONBLOCK;
+    const fd = try socketLinux(@intCast(family(addr)), socket_type, std.posix.IPPROTO.TCP);
+    errdefer _ = std.os.linux.close(fd);
+
+    const sa = sockAddr(addr);
+    switch (std.posix.errno(std.os.linux.connect(fd, sa.ptr(), sa.len))) {
+        .SUCCESS => {},
+        .INPROGRESS, .ALREADY, .AGAIN => try waitForConnectLinux(fd, timeout_ms),
+        else => |err| return std.posix.unexpectedErrno(err),
+    }
+
+    try clearNonblockingLinux(fd);
+    return .{ .socket = .{ .handle = fd, .address = addr } };
+}
+
+fn socketLinux(domain: u32, socket_type: u32, protocol: u32) !std.posix.fd_t {
+    const rc = std.os.linux.socket(domain, socket_type, protocol);
+    return switch (std.posix.errno(rc)) {
+        .SUCCESS => @intCast(rc),
+        .ACCES, .PERM => error.AccessDenied,
+        .AFNOSUPPORT => error.AddressFamilyUnsupported,
+        .PROTONOSUPPORT => error.ProtocolNotSupported,
+        .NFILE => error.SystemFdQuotaExceeded,
+        .MFILE => error.ProcessFdQuotaExceeded,
+        .NOBUFS, .NOMEM => error.SystemResources,
+        else => |err| std.posix.unexpectedErrno(err),
     };
+}
+
+fn waitForConnectLinux(fd: std.posix.fd_t, timeout_ms: u64) !void {
+    var fds = [_]std.posix.pollfd{.{
+        .fd = fd,
+        .events = std.posix.POLL.OUT,
+        .revents = 0,
+    }};
+    const ready = try std.posix.poll(&fds, pollTimeoutMs(timeout_ms));
+    if (ready == 0) return error.Timeout;
+
+    var err_code: c_int = 0;
+    var err_len: std.posix.socklen_t = @sizeOf(c_int);
+    const rc = std.os.linux.getsockopt(
+        fd,
+        std.posix.SOL.SOCKET,
+        std.posix.SO.ERROR,
+        std.mem.asBytes(&err_code).ptr,
+        &err_len,
+    );
+    switch (std.posix.errno(rc)) {
+        .SUCCESS => {},
+        else => |err| return std.posix.unexpectedErrno(err),
+    }
+    if (err_code == 0) return;
+    return switch (@as(std.posix.E, @enumFromInt(err_code))) {
+        .CONNREFUSED => error.ConnectionRefused,
+        .HOSTUNREACH => error.HostUnreachable,
+        .NETUNREACH => error.NetworkUnreachable,
+        .NETDOWN => error.NetworkDown,
+        .TIMEDOUT => error.Timeout,
+        .ACCES, .PERM => error.AccessDenied,
+        else => |err| std.posix.unexpectedErrno(err),
+    };
+}
+
+fn clearNonblockingLinux(fd: std.posix.fd_t) !void {
+    const current_rc = std.os.linux.fcntl(fd, std.posix.F.GETFL, 0);
+    const current_bits: u32 = switch (std.posix.errno(current_rc)) {
+        .SUCCESS => @intCast(current_rc),
+        else => |err| return std.posix.unexpectedErrno(err),
+    };
+    var next_flags: std.posix.O = @bitCast(current_bits);
+    next_flags.NONBLOCK = false;
+    const next_bits: u32 = @bitCast(next_flags);
+    switch (std.posix.errno(std.os.linux.fcntl(fd, std.posix.F.SETFL, @as(usize, next_bits)))) {
+        .SUCCESS => {},
+        else => |err| return std.posix.unexpectedErrno(err),
+    }
+}
+
+fn pollTimeoutMs(timeout_ms: u64) i32 {
+    return std.math.cast(i32, timeout_ms) orelse std.math.maxInt(i32);
 }
