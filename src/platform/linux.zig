@@ -672,27 +672,48 @@ fn fillLocalIp(allocator: std.mem.Allocator, info: *common.BasicInfo) !void {
     info.ipv6 = local.ipv6;
 }
 
-pub fn localIpFromInterfaces(allocator: std.mem.Allocator, include_nics: []const u8, exclude_nics: []const u8) !common.LocalIpInfo {
-    const output = commandOutput(allocator, &.{ "ip", "-o", "addr", "show", "scope", "global" }) catch return .{ .ipv4 = "", .ipv6 = "" };
-    defer allocator.free(output);
+const RouteFamily = enum {
+    ipv4,
+    ipv6,
+};
 
+pub fn localIpFromInterfaces(allocator: std.mem.Allocator, include_nics: []const u8, exclude_nics: []const u8) !common.LocalIpInfo {
     var ipv4: []const u8 = "";
     var ipv6: []const u8 = "";
-    var lines = std.mem.splitScalar(u8, output, '\n');
+
+    const output = commandOutput(allocator, &.{ "ip", "-o", "addr", "show", "scope", "global" }) catch null;
+    if (output) |bytes| {
+        defer allocator.free(bytes);
+        const parsed = parseIpAddrOutput(bytes, include_nics, exclude_nics);
+        if (parsed.ipv4.len != 0) ipv4 = try allocator.dupe(u8, parsed.ipv4);
+        if (parsed.ipv6.len != 0) ipv6 = try allocator.dupe(u8, parsed.ipv6);
+    }
+
+    if (ipv4.len == 0) ipv4 = try routeSourceAddress(allocator, &.{ "ip", "-4", "route", "get", "1.1.1.1" }, include_nics, exclude_nics, .ipv4);
+    if (ipv6.len == 0) ipv6 = try routeSourceAddress(allocator, &.{ "ip", "-6", "route", "get", "2001:4860:4860::8888" }, include_nics, exclude_nics, .ipv6);
+
+    return .{ .ipv4 = ipv4, .ipv6 = ipv6 };
+}
+
+pub fn parseIpAddrOutput(bytes: []const u8, include_nics: []const u8, exclude_nics: []const u8) common.LocalIpInfo {
+    var ipv4: []const u8 = "";
+    var ipv6: []const u8 = "";
+    var lines = std.mem.splitScalar(u8, bytes, '\n');
     while (lines.next()) |line| {
         var fields = std.mem.tokenizeAny(u8, line, " \t");
         _ = fields.next() orelse continue;
         const name_raw = fields.next() orelse continue;
-        const name = std.mem.trimEnd(u8, name_raw, ":");
+        const name = normalizeInterfaceName(std.mem.trimEnd(u8, name_raw, ":"));
         if (!shouldIncludeNetworkInterface(name, include_nics, exclude_nics)) continue;
         while (fields.next()) |field| {
             if (std.mem.eql(u8, field, "inet")) {
                 if (fields.next()) |cidr| {
-                    if (ipv4.len == 0) ipv4 = try stripCidr(allocator, cidr);
+                    if (ipv4.len == 0) ipv4 = stripCidrSlice(cidr);
                 }
             } else if (std.mem.eql(u8, field, "inet6")) {
                 if (fields.next()) |cidr| {
-                    if (ipv6.len == 0 and std.mem.indexOf(u8, cidr, "fe80:") == null) ipv6 = try stripCidr(allocator, cidr);
+                    const addr = stripCidrSlice(cidr);
+                    if (ipv6.len == 0 and !std.mem.startsWith(u8, addr, "fe80:")) ipv6 = addr;
                 }
             }
             if (ipv4.len != 0 and ipv6.len != 0) return .{ .ipv4 = ipv4, .ipv6 = ipv6 };
@@ -701,9 +722,56 @@ pub fn localIpFromInterfaces(allocator: std.mem.Allocator, include_nics: []const
     return .{ .ipv4 = ipv4, .ipv6 = ipv6 };
 }
 
+pub fn parseIpRouteGetSource(bytes: []const u8, include_nics: []const u8, exclude_nics: []const u8, family: RouteFamily) ?[]const u8 {
+    var dev: ?[]const u8 = null;
+    var src: ?[]const u8 = null;
+    var fields = std.mem.tokenizeAny(u8, bytes, " \t\r\n");
+    while (fields.next()) |field| {
+        if (std.mem.eql(u8, field, "dev")) {
+            dev = normalizeInterfaceName(fields.next() orelse return null);
+        } else if (std.mem.eql(u8, field, "src")) {
+            src = fields.next() orelse return null;
+        }
+    }
+
+    const interface_name = dev orelse return null;
+    if (!shouldIncludeNetworkInterface(interface_name, include_nics, exclude_nics)) return null;
+    const candidate = src orelse return null;
+    if (family == .ipv6 and std.mem.startsWith(u8, candidate, "fe80:")) return null;
+    return candidate;
+}
+
 fn stripCidr(allocator: std.mem.Allocator, cidr: []const u8) ![]const u8 {
+    return allocator.dupe(u8, stripCidrSlice(cidr));
+}
+
+fn stripCidrSlice(cidr: []const u8) []const u8 {
     const slash = std.mem.indexOfScalar(u8, cidr, '/') orelse cidr.len;
-    return allocator.dupe(u8, cidr[0..slash]);
+    return cidr[0..slash];
+}
+
+fn normalizeInterfaceName(name: []const u8) []const u8 {
+    const alias = std.mem.indexOfScalar(u8, name, '@') orelse return name;
+    return name[0..alias];
+}
+
+fn routeSourceAddress(
+    allocator: std.mem.Allocator,
+    argv: []const []const u8,
+    include_nics: []const u8,
+    exclude_nics: []const u8,
+    family: RouteFamily,
+) ![]const u8 {
+    const line = commandOutputFirstLine(allocator, argv) catch return "";
+    defer allocator.free(line);
+    const src = parseIpRouteGetSource(line, include_nics, exclude_nics, family) orelse return "";
+    return allocator.dupe(u8, src);
+}
+
+pub fn canProbeIpv6(allocator: std.mem.Allocator, include_nics: []const u8, exclude_nics: []const u8) !bool {
+    const line = commandOutputFirstLine(allocator, &.{ "ip", "-6", "route", "get", "2001:4860:4860::8888" }) catch return false;
+    defer allocator.free(line);
+    return parseIpRouteGetSource(line, include_nics, exclude_nics, .ipv6) != null;
 }
 
 fn commandOutput(allocator: std.mem.Allocator, argv: []const []const u8) ![]const u8 {

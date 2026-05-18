@@ -5,6 +5,9 @@ const net = @import("net");
 const raw_conn = @import("raw_conn.zig");
 
 /// Public IP discovery helpers for IPv4 and IPv6 reporting.
+pub const external_lookup_timeout_ms: u64 = 5_000;
+pub const external_lookup_max_retries: i32 = 0;
+
 const ipv4_apis = [_][]const u8{
     "https://www.visa.cn/cdn-cgi/trace",
     "https://www.qualcomm.cn/cdn-cgi/trace",
@@ -41,9 +44,10 @@ fn getAddressFromApis(
     family: raw_conn.AddressFamily,
     finder: fn ([]const u8) ?[]const u8,
 ) ![]const u8 {
+    const probe_cfg = probeConfig(cfg);
     for (apis) |url| {
         debug.log("public IP lookup ({s}) probing {s}", .{ @tagName(family), url });
-        const body = http.getReadCfgFamily(allocator, url, cfg, family, "curl/8.0.1") catch |err| {
+        const body = http.getReadCfgFamily(allocator, url, probe_cfg, family, "curl/8.0.1") catch |err| {
             debug.log("public IP lookup ({s}) failed via {s}: {s}", .{ @tagName(family), url, @errorName(err) });
             continue;
         };
@@ -56,6 +60,24 @@ fn getAddressFromApis(
     }
     debug.log("public IP lookup ({s}) exhausted all providers", .{@tagName(family)});
     return allocator.dupe(u8, "");
+}
+
+fn probeConfig(cfg: anytype) struct {
+    timeout_ms: u64,
+    max_retries: i32,
+    ignore_unsafe_cert: bool,
+    custom_dns: []const u8,
+    cf_access_client_id: []const u8,
+    cf_access_client_secret: []const u8,
+} {
+    return .{
+        .timeout_ms = external_lookup_timeout_ms,
+        .max_retries = external_lookup_max_retries,
+        .ignore_unsafe_cert = cfg.ignore_unsafe_cert,
+        .custom_dns = cfg.custom_dns,
+        .cf_access_client_id = cfg.cf_access_client_id,
+        .cf_access_client_secret = cfg.cf_access_client_secret,
+    };
 }
 
 pub fn findIPv4(bytes: []const u8) ?[]const u8 {

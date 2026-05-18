@@ -83,10 +83,13 @@ pub fn connect(addr: Address) !Stream {
 
 pub fn connectWithTimeout(addr: Address, timeout_ms: u64) !Stream {
     if (timeout_ms == 0) return connect(addr);
-    return switch (builtin.os.tag) {
-        .linux => connectWithTimeoutLinux(addr, timeout_ms),
-        else => connect(addr),
+    const stream = switch (builtin.os.tag) {
+        .linux => try connectWithTimeoutLinux(addr, timeout_ms),
+        else => try connect(addr),
     };
+    errdefer close(stream);
+    try setStreamTimeouts(stream, timeout_ms);
+    return stream;
 }
 
 pub fn close(stream: Stream) void {
@@ -161,6 +164,29 @@ fn connectWithTimeoutLinux(addr: Address, timeout_ms: u64) !Stream {
 
     try clearNonblockingLinux(fd);
     return .{ .socket = .{ .handle = fd, .address = addr } };
+}
+
+fn setStreamTimeouts(stream: Stream, timeout_ms: u64) !void {
+    switch (builtin.os.tag) {
+        .windows => return,
+        else => {
+            const tv = timeoutToTimeval(timeout_ms);
+            try std.posix.setsockopt(stream.socket.handle, std.posix.SOL.SOCKET, std.posix.SO.RCVTIMEO, std.mem.asBytes(&tv));
+            try std.posix.setsockopt(stream.socket.handle, std.posix.SOL.SOCKET, std.posix.SO.SNDTIMEO, std.mem.asBytes(&tv));
+        },
+    }
+}
+
+fn timeoutToTimeval(timeout_ms: u64) std.posix.timeval {
+    const Timeval = std.posix.timeval;
+    const sec_type = @FieldType(Timeval, "sec");
+    const usec_type = @FieldType(Timeval, "usec");
+    const seconds = timeout_ms / 1000;
+    const microseconds = (timeout_ms % 1000) * 1000;
+    return .{
+        .sec = std.math.cast(sec_type, seconds) orelse std.math.maxInt(sec_type),
+        .usec = std.math.cast(usec_type, microseconds) orelse std.math.maxInt(usec_type),
+    };
 }
 
 fn socketLinux(domain: u32, socket_type: u32, protocol: u32) !std.posix.fd_t {

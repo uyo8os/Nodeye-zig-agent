@@ -118,7 +118,7 @@ pub const RawConn = struct {
                     .realtime_now = std.Io.Timestamp.now(std.Options.debug_io, .real),
                     .allow_truncation_attacks = true,
                 },
-            ) catch return error.TlsInitializationFailed;
+            ) catch |err| return err;
         } else {
             var random_buffer: [std.crypto.tls.Client.Options.entropy_len]u8 = undefined;
             std.Options.debug_io.random(&random_buffer);
@@ -142,7 +142,7 @@ pub const RawConn = struct {
                     .realtime_now = std.Io.Timestamp.now(std.Options.debug_io, .real),
                     .allow_truncation_attacks = true,
                 },
-            ) catch return error.TlsInitializationFailed;
+            ) catch |err| return err;
         }
     }
 
