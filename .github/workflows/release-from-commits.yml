@@ -41,12 +41,24 @@ jobs:
           echo >> RELEASE_NOTES.md
           git log --no-merges --pretty=format:'- %s (%h) by %an' $RANGE >> RELEASE_NOTES.md || true
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
+        env:
+          CURRENT_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.event.release.tag_name }}
         with:
           script: |
             const fs = require('fs');
+            const tag = process.env.CURRENT_TAG;
+            let releaseId = context.payload.release?.id;
+            if (!releaseId) {
+              const { data } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag,
+              });
+              releaseId = data.id;
+            }
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              release_id: context.payload.release.id,
+              release_id: releaseId,
               body: fs.readFileSync('RELEASE_NOTES.md', 'utf8'),
             });
