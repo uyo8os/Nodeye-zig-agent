@@ -189,14 +189,16 @@ jobs:
       - name: Trigger release notes workflow
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           set -eu
-          gh workflow run "Release notes from commits" -f release_tag="$TAG"
+          gh workflow run "Release notes from commits" --repo "$GH_REPO" -f release_tag="$TAG"
       - name: Trigger docker publish workflow
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           set -eu
-          gh workflow run "Publish Docker Image" -f version="$TAG" -f source_ref="$TAG"
+          gh workflow run "Publish Docker Image" --repo "$GH_REPO" -f version="$TAG" -f source_ref="$TAG"
