@@ -428,6 +428,16 @@ def terminate(proc):
         proc.wait(timeout=5)
 
 
+def wait_for_output_contains(proc, output, needle, deadline):
+    while time.monotonic() < deadline:
+        if needle in "".join(output):
+            return
+        if proc.poll() is not None:
+            raise RuntimeError(f"process exited before '{needle}' appeared: {proc.returncode}\n{''.join(output[-80:])}")
+        time.sleep(0.05)
+    raise RuntimeError(f"timed out waiting for '{needle}'\n{''.join(output[-80:])}")
+
+
 def run_panel_e2e(args):
     exec_enabled = not args.no_exec
     state = State(expect_cf=args.cf, exec_enabled=exec_enabled, terminal=args.terminal, ping_tasks=[])
@@ -635,15 +645,18 @@ def run_self_update_e2e(args):
                 tcp.server_close()
             if os.path.exists(old_path + ".bak") or os.path.exists(old_path + ".update-state.json"):
                 raise RuntimeError("pending update files were not confirmed and cleaned")
-            version_out = subprocess.run(
-                [old_path, "--endpoint", "http://127.0.0.1:9", "--token", TOKEN, "--disable-auto-update", "--max-retries", "0"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=10,
-            )
-            if "Komari Agent v9.9.9" not in version_out.stdout:
-                raise RuntimeError(f"updated binary version not observed\n{version_out.stdout}")
+            version_output = []
+            version_proc, version_deadline = run_agent([
+                old_path,
+                "--endpoint", "http://127.0.0.1:9",
+                "--token", TOKEN,
+                "--disable-auto-update",
+                "--max-retries", "0",
+            ], os.environ.copy(), 10, version_output)
+            try:
+                wait_for_output_contains(version_proc, version_output, "Komari Agent v9.9.9", version_deadline)
+            finally:
+                terminate(version_proc)
 
             rollback_path = os.path.join(tmp, "komari-agent-rollback")
             shutil.copy2(args.new_agent, rollback_path)
