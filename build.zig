@@ -64,6 +64,10 @@ pub fn build(b: *std.Build) void {
     if (target.result.os.tag == .linux or target.result.os.tag == .freebsd or target.result.os.tag == .macos) {
         exe.root_module.linkSystemLibrary("c", .{});
     }
+    if (target.result.os.tag == .windows) {
+        exe.root_module.linkSystemLibrary("advapi32", .{});
+        exe.root_module.linkSystemLibrary("iphlpapi", .{});
+    }
     if (target.result.os.tag == .linux and target.result.abi != .musl and target.result.abi != .musleabi) {
         exe.root_module.linkSystemLibrary("util", .{});
     }
@@ -121,11 +125,13 @@ pub fn build(b: *std.Build) void {
         "test/dns_idna_test.zig",
         "test/basic_info_flow_test.zig",
         "test/linux_basic_info_test.zig",
+        "test/windows_provider_test.zig",
         "test/disk_filter_test.zig",
         "test/network_filter_test.zig",
         "test/cpu_proc_test.zig",
         "test/task_test.zig",
         "test/ping_test.zig",
+        "test/windows_process_test.zig",
         "test/ip_extract_test.zig",
         "test/coverage_test.zig",
         "test/ws_message_test.zig",
@@ -168,6 +174,24 @@ fn addTest(
     });
     tests.root_module.addOptions("build_options", opts);
     addCompatImports(tests.root_module, compat_module, net_module);
+    const report_netstatic = b.createModule(.{
+        .root_source_file = b.path("src/report/netstatic.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    addCompatImports(report_netstatic, compat_module, net_module);
+    if (target.result.os.tag == .windows) {
+        tests.root_module.linkSystemLibrary("advapi32", .{});
+        tests.root_module.linkSystemLibrary("iphlpapi", .{});
+        const platform_provider = b.createModule(.{
+            .root_source_file = b.path("src/platform/provider.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        addCompatImports(platform_provider, compat_module, net_module);
+        platform_provider.addImport("report_netstatic", report_netstatic);
+        tests.root_module.addImport("platform_provider", platform_provider);
+    }
     tests.root_module.addImport("version", version_module);
     tests.root_module.addImport("thread_stacks", b.createModule(.{
         .root_source_file = b.path("src/thread_stacks.zig"),
@@ -226,12 +250,6 @@ fn addTest(
     tests.root_module.addImport("update", update_module);
     tests.root_module.addImport("dns", dns_module);
     tests.root_module.addImport("idna", idna_module);
-    const report_netstatic = b.createModule(.{
-        .root_source_file = b.path("src/report/netstatic.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    addCompatImports(report_netstatic, compat_module, net_module);
     tests.root_module.addImport("basic_info_flow", b.createModule(.{
         .root_source_file = b.path("src/basic_info_flow.zig"),
         .target = target,

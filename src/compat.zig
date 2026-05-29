@@ -23,6 +23,30 @@ pub fn getEnvVarOwned(allocator: std.mem.Allocator, key: []const u8) ![]u8 {
     return runtime.getEnvVarOwned(allocator, key);
 }
 
+pub fn minimalWindowsEnvMap(allocator: std.mem.Allocator) !std.process.Environ.Map {
+    var env = emptyEnvMap(allocator);
+    errdefer env.deinit();
+
+    const keys = [_][]const u8{
+        "SystemRoot",
+        "WINDIR",
+        "ComSpec",
+        "PATH",
+        "PATHEXT",
+        "TEMP",
+        "TMP",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+    };
+    for (&keys) |key| {
+        const value = getEnvVarOwned(allocator, key) catch continue;
+        defer allocator.free(value);
+        try env.put(key, value);
+    }
+    return env;
+}
+
 pub const readFileAlloc = fs.readFileAlloc;
 pub const selfExePathAlloc = fs.selfExePathAlloc;
 pub const statFile = fs.statFile;
@@ -53,7 +77,14 @@ pub const waitPid = posix.waitPid;
 pub const setsid = posix.setsid;
 
 pub const RunOutputResult = process.RunOutputResult;
+pub const WindowsProcessHandles = process.WindowsProcessHandles;
+pub const WindowsPipedChild = process.WindowsPipedChild;
 pub const runOutputIgnoreStderr = process.runOutputIgnoreStderr;
+pub const runOutputWindows = process.runOutputWindows;
+pub const spawnWindowsPiped = process.spawnWindowsPiped;
+pub const waitWindowsProcess = process.waitWindowsProcess;
+pub const terminateWindowsProcess = process.terminateWindowsProcess;
+pub const closeWindowsProcessHandles = process.closeWindowsProcessHandles;
 pub const runIgnoreOutput = process.runIgnoreOutput;
 
 pub const sleep = time.sleep;

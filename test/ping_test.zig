@@ -1,3 +1,4 @@
+const builtin = @import("builtin");
 const std = @import("std");
 const ping = @import("protocol_ping");
 
@@ -108,4 +109,10 @@ test "tcp latency selector rejects retransmission-like retry drops" {
     try std.testing.expectEqual(@as(i64, -1), ping.selectLatencyFromSamplesForTest("tcp", &.{ 1205, 115, 118 }));
     try std.testing.expectEqual(@as(i64, 450), ping.selectLatencyFromSamplesForTest("tcp", &.{ 1205, 450, -1 }));
     try std.testing.expectEqual(@as(i64, 115), ping.selectLatencyFromSamplesForTest("http", &.{ 1205, 115, 118 }));
+}
+
+test "windows icmp ping can probe loopback" {
+    if (builtin.os.tag != .windows) return error.SkipZigTest;
+    const latency = ping.measure(std.testing.allocator, "icmp", "127.0.0.1", "");
+    try std.testing.expect(latency >= 0);
 }

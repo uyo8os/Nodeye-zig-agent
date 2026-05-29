@@ -20,6 +20,7 @@ const thread_stacks = @import("thread_stacks.zig");
 /// Agent entrypoint that wires config, reporting, updates, and shutdown.
 pub const std_options: std.Options = .{
     .enable_segfault_handler = !(builtin.os.tag == .freebsd and builtin.cpu.arch == .x86),
+    .unexpected_error_tracing = false,
 };
 
 var shutdown_requested = std.atomic.Value(bool).init(false);

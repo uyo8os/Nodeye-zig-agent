@@ -43,6 +43,14 @@ test "runCommandDetailed executes real shell command on posix" {
     try std.testing.expectEqual(@as(i32, 0), result.exit_code);
 }
 
+test "runCommandDetailed executes real shell command on windows" {
+    if (builtin.os.tag != .windows) return error.SkipZigTest;
+    const result = try task.runCommandDetailed(std.testing.allocator, "[Console]::Out.Write('e2e-exec-ok')");
+    defer result.deinit(std.testing.allocator);
+    try std.testing.expectEqualStrings("e2e-exec-ok", result.output);
+    try std.testing.expectEqual(@as(i32, 0), result.exit_code);
+}
+
 test "runCommandDetailed merges stderr and exit code" {
     const result = try task.runCommandDetailedWithRunner(std.testing.allocator, "stderr", stdoutStderrRunner);
     defer result.deinit(std.testing.allocator);

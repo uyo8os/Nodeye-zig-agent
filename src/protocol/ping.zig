@@ -182,17 +182,40 @@ pub fn icmpProbeIdentityForTest(nonce: u64) IcmpProbeIdentity {
 }
 
 fn icmpPing(allocator: std.mem.Allocator, target: []const u8, custom_dns: []const u8, icmp_mode: IcmpMode) !i64 {
-    if (builtin.os.tag == .windows) return error.Unsupported;
     const addrs = try dns.resolveHost(allocator, parseHostOnly(target), 0, custom_dns);
     defer allocator.free(addrs);
     for (addrs) |addr| {
         if (!net.isIpv4(addr) and !net.isIpv6(addr)) continue;
+        if (builtin.os.tag == .windows) {
+            return icmpPingWindows(allocator, addr) catch continue;
+        }
         return icmpPingAddress(addr, icmp_mode) catch |err| switch (err) {
             error.AccessDenied => continue,
             else => continue,
         };
     }
     return -1;
+}
+
+fn icmpPingWindows(allocator: std.mem.Allocator, addr: net.Address) !i64 {
+    const work_allocator = std.heap.page_allocator;
+    const target = try formatIcmpTarget(allocator, addr);
+    defer allocator.free(target);
+
+    const script = try std.fmt.allocPrint(
+        work_allocator,
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $reply = Test-Connection -ComputerName '{s}' -Count 1 -ErrorAction Stop | Select-Object -First 1 -ExpandProperty ResponseTime; if ($null -eq $reply) {{ exit 1 }}; [Console]::Out.WriteLine([int64]$reply)",
+        .{target},
+    );
+    defer work_allocator.free(script);
+
+    const result = try compat.runOutputWindows(work_allocator, &.{ "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script }, 64 * 1024);
+    defer work_allocator.free(result.stdout);
+
+    if (result.term != .exited or result.term.exited != 0) return error.Timeout;
+    const trimmed = std.mem.trim(u8, result.stdout, " \t\r\n");
+    if (trimmed.len == 0) return error.Timeout;
+    return std.fmt.parseInt(i64, trimmed, 10);
 }
 
 fn icmpPingAddress(addr: net.Address, icmp_mode: IcmpMode) !i64 {
@@ -375,6 +398,22 @@ fn parseHostOnly(target: []const u8) []const u8 {
         if (std.mem.indexOfScalar(u8, target[0..idx], ':') == null) return target[0..idx];
     }
     return target;
+}
+
+fn formatIcmpTarget(allocator: std.mem.Allocator, addr: net.Address) ![]const u8 {
+    var buf: [96]u8 = undefined;
+    var writer: std.Io.Writer = .fixed(&buf);
+    try addr.format(&writer);
+    const formatted = writer.buffered();
+
+    if (std.mem.startsWith(u8, formatted, "[") and std.mem.endsWith(u8, formatted, "]:0")) {
+        return allocator.dupe(u8, formatted[1 .. formatted.len - 3]);
+    }
+    if (std.mem.endsWith(u8, formatted, ":0")) {
+        const idx = std.mem.lastIndexOfScalar(u8, formatted, ':') orelse formatted.len;
+        return allocator.dupe(u8, formatted[0..idx]);
+    }
+    return allocator.dupe(u8, formatted);
 }
 
 fn httpPing(allocator: std.mem.Allocator, target: []const u8, custom_dns: []const u8) !i64 {

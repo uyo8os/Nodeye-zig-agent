@@ -104,7 +104,7 @@ pub fn startSession(allocator: std.mem.Allocator, cfg: anytype, request_id: []co
 const ShellSession = struct {
     input: std.Io.File,
     output: std.Io.File,
-    pid: if (builtin.os.tag == .windows) void else std.posix.pid_t,
+    pid: if (builtin.os.tag == .windows) compat.WindowsProcessHandles else std.posix.pid_t,
 
     fn start(allocator: std.mem.Allocator) !ShellSession {
         if (builtin.os.tag == .linux or builtin.os.tag == .macos) return startZigPty(allocator);
@@ -114,7 +114,13 @@ const ShellSession = struct {
 
     fn close(self: *ShellSession) void {
         self.gracefulShutdown();
-        if (builtin.os.tag != .windows and @TypeOf(self.pid) != void) {
+        if (builtin.os.tag == .windows) {
+            if (!compat.waitWindowsProcess(self.pid.process, 2000)) {
+                compat.terminateWindowsProcess(self.pid.process, 1);
+                _ = compat.waitWindowsProcess(self.pid.process, 3000);
+            }
+            compat.closeWindowsProcessHandles(&self.pid);
+        } else {
             _ = std.posix.kill(-self.pid, std.posix.SIG.TERM) catch {
                 _ = std.posix.kill(self.pid, std.posix.SIG.TERM) catch {};
             };
@@ -170,6 +176,7 @@ const ShellSession = struct {
             if (std.posix.errno(rc) != .SUCCESS) return error.ResizeFailed;
             return;
         }
+        if (builtin.os.tag == .windows) return;
         var buf: [64]u8 = undefined;
         const cmd = try std.fmt.bufPrint(&buf, "stty cols {d} rows {d}\n", .{ cols, rows });
         try self.writeInput(cmd);
@@ -216,7 +223,7 @@ fn startZigPtyWithPrelude(allocator: std.mem.Allocator, use_prelude: bool) !Shel
             .use_utf8 = true,
         });
     } else blk: {
-        var argv = [_:null]?[*:0]const u8{ shell.ptr };
+        var argv = [_:null]?[*:0]const u8{shell.ptr};
         break :blk try zigpty.forkPty(.{
             .file = shell.ptr,
             .argv = &argv,
@@ -284,7 +291,7 @@ fn startBsdPtyWithPrelude(allocator: std.mem.Allocator, use_prelude: bool) !Shel
             var argv = [_:null]?[*:0]const u8{ shell_base.ptr, "-c", value.ptr };
             compat.execveZ(shell.ptr, &argv, env.slice.ptr) catch std.process.exit(127);
         } else {
-            var argv = [_:null]?[*:0]const u8{ shell_base.ptr };
+            var argv = [_:null]?[*:0]const u8{shell_base.ptr};
             compat.execveZ(shell.ptr, &argv, env.slice.ptr) catch std.process.exit(127);
         }
     }
@@ -305,18 +312,24 @@ fn childNoHangFlag() u32 {
 }
 
 fn startPipeFallback(allocator: std.mem.Allocator) !ShellSession {
+    if (builtin.os.tag == .windows) return startWindowsPipeFallback(allocator);
+
     const shell = shellPath();
-    const argv = if (builtin.os.tag == .windows)
-        &.{shell}
-    else
-        &.{ "script", "-q", "-c", shell, "/dev/null" };
+    const env = try terminalEnv(allocator);
+    defer {
+        env.deinit();
+        allocator.destroy(env);
+    }
+    const cwd = try terminalCwdAlloc(allocator);
+    defer allocator.free(cwd);
+    const argv = &.{ "script", "-q", "-c", shell, "/dev/null" };
     var child = try std.process.spawn(std.Options.debug_io, .{
         .argv = argv,
-        .environ_map = try terminalEnv(allocator),
+        .cwd = .{ .path = cwd },
+        .environ_map = env,
         .stdin = .pipe,
         .stdout = .pipe,
         .stderr = .ignore,
-        .create_no_window = builtin.os.tag == .windows,
     });
     if (child.stdin == null or child.stdout == null) {
         child.kill(std.Options.debug_io);
@@ -325,7 +338,18 @@ fn startPipeFallback(allocator: std.mem.Allocator) !ShellSession {
     return .{
         .input = child.stdin.?,
         .output = child.stdout.?,
-        .pid = if (builtin.os.tag == .windows) {} else child.id orelse return error.ShellPipeFailed,
+        .pid = child.id orelse return error.ShellPipeFailed,
+    };
+}
+
+fn startWindowsPipeFallback(allocator: std.mem.Allocator) !ShellSession {
+    const cwd = try terminalCwdAlloc(allocator);
+    defer allocator.free(cwd);
+    const child = try compat.spawnWindowsPiped(allocator, &.{ shellPath(), "-NoLogo" }, cwd);
+    return .{
+        .input = child.stdin,
+        .output = child.stdout,
+        .pid = child.process,
     };
 }
 
@@ -344,6 +368,7 @@ fn tiocscttyRequest() c_ulong {
 }
 
 fn shellPath() []const u8 {
+    if (builtin.os.tag == .windows) return "powershell.exe";
     if (compat.getEnvVarOwned(std.heap.page_allocator, "SHELL")) |value| {
         if (value.len != 0) return value;
     } else |_| {}
@@ -389,10 +414,12 @@ fn isExecutable(path: []const u8) bool {
 
 fn terminalEnv(allocator: std.mem.Allocator) !*std.process.Environ.Map {
     var env = try allocator.create(std.process.Environ.Map);
-    env.* = std.process.Environ.Map.init(allocator);
-    try env.put("TERM", "xterm-256color");
-    try env.put("LANG", "C.UTF-8");
-    try env.put("LC_ALL", "C.UTF-8");
+    env.* = if (builtin.os.tag == .windows) try compat.currentEnvMap(allocator) else compat.emptyEnvMap(allocator);
+    if (builtin.os.tag != .windows) {
+        try env.put("TERM", "xterm-256color");
+        try env.put("LANG", "C.UTF-8");
+        try env.put("LC_ALL", "C.UTF-8");
+    }
     return env;
 }
 
@@ -417,6 +444,11 @@ fn pipeShellOutputToWs(allocator: std.mem.Allocator, from: std.Io.File, ws: *ws_
 }
 
 fn terminalCwdAlloc(allocator: std.mem.Allocator) ![]u8 {
+    if (builtin.os.tag == .windows) {
+        const exe = compat.selfExePathAlloc(allocator) catch return allocator.dupe(u8, ".");
+        defer allocator.free(exe);
+        return allocator.dupe(u8, std.fs.path.dirname(exe) orelse ".");
+    }
     if (compat.getEnvVarOwned(allocator, "HOME")) |home| {
         if (home.len != 0) return home;
         allocator.free(home);

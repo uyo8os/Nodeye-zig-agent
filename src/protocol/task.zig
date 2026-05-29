@@ -41,13 +41,39 @@ pub fn runCommandWithRunner(allocator: std.mem.Allocator, command: []const u8, r
 
 pub fn runCommandDetailed(allocator: std.mem.Allocator, command: []const u8) !CommandResult {
     if (command.len == 0) return .{ .output = try allocator.dupe(u8, "No command provided"), .exit_code = 0 };
-    if (builtin.os.tag == .windows) return error.UnsupportedOs;
+    if (builtin.os.tag == .windows) {
+        return runCommandDetailedWindows(allocator, command) catch |err| switch (err) {
+            error.StreamTooLong => return .{
+                .output = try std.fmt.allocPrint(allocator, "Command output exceeded {d} bytes", .{max_command_output_bytes}),
+                .exit_code = -1,
+            },
+            else => return err,
+        };
+    }
     return runCommandDetailedPosix(allocator, command) catch |err| switch (err) {
         error.StreamTooLong => return .{
             .output = try std.fmt.allocPrint(allocator, "Command output exceeded {d} bytes", .{max_command_output_bytes}),
             .exit_code = -1,
         },
         else => return err,
+    };
+}
+
+fn runCommandDetailedWindows(allocator: std.mem.Allocator, command: []const u8) !CommandResult {
+    const work_allocator = std.heap.page_allocator;
+    const wrapped = try std.fmt.allocPrint(
+        work_allocator,
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; & {{ {s} }} 2>&1; $code = if ($null -ne $LASTEXITCODE) {{ [int]$LASTEXITCODE }} elseif ($?) {{ 0 }} else {{ 1 }}; exit $code",
+        .{command},
+    );
+    defer work_allocator.free(wrapped);
+
+    const result = try compat.runOutputWindows(work_allocator, &.{ "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", wrapped }, max_command_output_bytes);
+    defer work_allocator.free(result.stdout);
+
+    return .{
+        .output = try normalizeCommandOutput(allocator, result.stdout),
+        .exit_code = exitCode(result.term),
     };
 }
 
@@ -71,7 +97,7 @@ fn runCommandDetailedPosix(allocator: std.mem.Allocator, command: []const u8) !C
         const arg_c: [:0]const u8 = "-c";
         const env_path: [:0]const u8 = "PATH=" ++ safe_command_path;
         const argv = [_:null]?[*:0]const u8{ shell.ptr, arg_c.ptr, shell_command.ptr };
-        const envp = [_:null]?[*:0]const u8{ env_path.ptr };
+        const envp = [_:null]?[*:0]const u8{env_path.ptr};
         compat.execveZ(shell.ptr, &argv, &envp) catch std.process.exit(127);
     }
     compat.closeFd(fds[1]);
@@ -113,9 +139,9 @@ fn realCommandRunner(allocator: std.mem.Allocator, env: *std.process.Environ.Map
 
 pub fn runCommandDetailedWithRunner(allocator: std.mem.Allocator, command: []const u8, runner: CommandRunner) !CommandResult {
     if (command.len == 0) return .{ .output = try allocator.dupe(u8, "No command provided"), .exit_code = 0 };
-    var env = compat.emptyEnvMap(allocator);
+    var env = if (builtin.os.tag == .windows) try compat.currentEnvMap(allocator) else compat.emptyEnvMap(allocator);
     defer env.deinit();
-    try env.put("PATH", safe_command_path);
+    if (builtin.os.tag != .windows) try env.put("PATH", safe_command_path);
     const result = runner(allocator, &env, command) catch |err| switch (err) {
         error.StreamTooLong => return .{
             .output = try std.fmt.allocPrint(allocator, "Command output exceeded {d} bytes", .{max_command_output_bytes}),

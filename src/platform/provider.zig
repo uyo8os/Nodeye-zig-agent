@@ -7,6 +7,7 @@ const impl = switch (builtin.os.tag) {
     .linux => @import("linux.zig"),
     .freebsd => @import("freebsd.zig"),
     .macos => @import("darwin.zig"),
+    .windows => @import("windows.zig"),
     else => @import("linux.zig"),
 };
 

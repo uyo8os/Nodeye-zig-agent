@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const compat = @import("compat");
+const windows = std.os.windows;
 
 const safe_command_path = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
@@ -29,6 +30,62 @@ pub const Totals = struct {
 const SampleList = std.ArrayList(TrafficData);
 const SampleMap = std.StringArrayHashMapUnmanaged(SampleList);
 const CounterMap = std.StringArrayHashMapUnmanaged(Counters);
+
+const MIB_IF_ROW2 = extern struct {
+    InterfaceLuid: u64,
+    InterfaceIndex: u32,
+    InterfaceGuid: windows.GUID,
+    Alias: [257]u16,
+    Description: [257]u16,
+    PhysicalAddressLength: u32,
+    PhysicalAddress: [32]u8,
+    PermanentPhysicalAddress: [32]u8,
+    Mtu: u32,
+    Type: u32,
+    TunnelType: u32,
+    MediaType: u32,
+    PhysicalMediumType: u32,
+    AccessType: u32,
+    DirectionType: u32,
+    InterfaceAndOperStatusFlags: u8,
+    OperStatus: u32,
+    AdminStatus: u32,
+    MediaConnectState: u32,
+    NetworkGuid: windows.GUID,
+    ConnectionType: u32,
+    TransmitLinkSpeed: u64,
+    ReceiveLinkSpeed: u64,
+    InOctets: u64,
+    InUcastPkts: u64,
+    InNUcastPkts: u64,
+    InDiscards: u64,
+    InErrors: u64,
+    InUnknownProtos: u64,
+    InUcastOctets: u64,
+    InMulticastOctets: u64,
+    InBroadcastOctets: u64,
+    OutOctets: u64,
+    OutUcastPkts: u64,
+    OutNUcastPkts: u64,
+    OutDiscards: u64,
+    OutErrors: u64,
+    OutUcastOctets: u64,
+    OutMulticastOctets: u64,
+    OutBroadcastOctets: u64,
+    OutQLen: u64,
+};
+
+const MIB_IF_TABLE2 = extern struct {
+    NumEntries: windows.DWORD,
+    Table: [1]MIB_IF_ROW2,
+};
+
+const IF_TYPE_SOFTWARE_LOOPBACK: u32 = 24;
+const NET_IF_ACCESS_LOOPBACK: u32 = 1;
+
+extern "iphlpapi" fn GetIfTable2(table: *?*MIB_IF_TABLE2) callconv(.c) windows.DWORD;
+
+extern "iphlpapi" fn FreeMibTable(memory: *anyopaque) callconv(.c) void;
 
 const Runtime = struct {
     allocator: std.mem.Allocator,
@@ -155,6 +212,11 @@ fn saveLoop(rt: *Runtime) void {
 }
 
 fn sampleOnceLocked(rt: *Runtime) !void {
+    if (builtin.os.tag == .windows) {
+        var counters = try readWindowsCounters(rt.allocator);
+        defer deinitCounterMap(&counters, rt.allocator);
+        return sampleCounterMapLocked(rt, &counters);
+    }
     if (builtin.os.tag != .freebsd and builtin.os.tag != .macos) {
         return sampleProcNetDevOnceLocked(rt);
     }
@@ -256,6 +318,52 @@ fn readNetstatCounters(allocator: std.mem.Allocator) !CounterMap {
         try result.put(allocator, try allocator.dupe(u8, name), .{ .tx = tx, .rx = rx });
     }
     return result;
+}
+
+fn readWindowsCounters(allocator: std.mem.Allocator) !CounterMap {
+    var result: CounterMap = .empty;
+    var table_ptr: ?*MIB_IF_TABLE2 = null;
+    if (GetIfTable2(&table_ptr) != 0 or table_ptr == null) return result;
+    defer FreeMibTable(@ptrCast(table_ptr.?));
+
+    const table = table_ptr.?;
+    const rows: [*]const MIB_IF_ROW2 = @ptrCast(&table.Table[0]);
+    for (0..table.NumEntries) |i| {
+        const row = rows[i];
+        const name = windowsInterfaceName(allocator, row) catch continue;
+        errdefer allocator.free(name);
+        if (name.len == 0) {
+            allocator.free(name);
+            continue;
+        }
+        if (isWindowsLoopbackInterface(row, name)) {
+            allocator.free(name);
+            continue;
+        }
+        try result.put(allocator, name, .{
+            .tx = row.OutOctets,
+            .rx = row.InOctets,
+        });
+    }
+    return result;
+}
+
+fn windowsInterfaceName(allocator: std.mem.Allocator, row: MIB_IF_ROW2) ![]const u8 {
+    const alias_end = utf16BufLen(&row.Alias);
+    if (alias_end != 0) return std.unicode.utf16LeToUtf8Alloc(allocator, row.Alias[0..alias_end]);
+    const desc_end = utf16BufLen(&row.Description);
+    if (desc_end != 0) return std.unicode.utf16LeToUtf8Alloc(allocator, row.Description[0..desc_end]);
+    return allocator.dupe(u8, "");
+}
+
+fn utf16BufLen(buf: []const u16) usize {
+    return std.mem.indexOfScalar(u16, buf, 0) orelse buf.len;
+}
+
+fn isWindowsLoopbackInterface(row: MIB_IF_ROW2, name: []const u8) bool {
+    if (row.Type == IF_TYPE_SOFTWARE_LOOPBACK) return true;
+    if (row.AccessType == NET_IF_ACCESS_LOOPBACK) return true;
+    return std.ascii.indexOfIgnoreCase(name, "loopback") != null;
 }
 
 fn commandOutput(allocator: std.mem.Allocator, argv: []const []const u8) ![]u8 {
@@ -474,8 +582,9 @@ fn isNicAllowed(config: NetStaticConfig, name: []const u8) bool {
 fn shouldInclude(name: []const u8, include_nics: []const u8, exclude_nics: []const u8) bool {
     const excluded_prefixes = [_][]const u8{ "br", "cni", "docker", "podman", "flannel", "lo", "veth", "virbr", "vmbr", "tap", "fwbr", "fwpr" };
     for (&excluded_prefixes) |prefix| {
-        if (std.mem.startsWith(u8, name, prefix)) return false;
+        if (std.ascii.startsWithIgnoreCase(name, prefix)) return false;
     }
+    if (std.ascii.indexOfIgnoreCase(name, "loopback") != null) return false;
     if (include_nics.len != 0) return csvMatches(include_nics, name);
     if (exclude_nics.len != 0 and csvMatches(exclude_nics, name)) return false;
     return true;
