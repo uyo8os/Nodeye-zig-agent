@@ -34,7 +34,8 @@ pub fn getIPv6Address(allocator: std.mem.Allocator, cfg: anytype) ![]const u8 {
 }
 
 pub fn shouldLookupExternalAddress(existing: []const u8, custom: []const u8, allow_external_lookup: bool) bool {
-    return allow_external_lookup and custom.len == 0 and existing.len == 0;
+    _ = existing;
+    return allow_external_lookup and custom.len == 0;
 }
 
 fn getAddressFromApis(

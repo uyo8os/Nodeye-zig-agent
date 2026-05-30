@@ -16,9 +16,10 @@ test "coverage returns null when no address is present" {
     try std.testing.expect(ip.findIPv6("status=ok\nno-address-here\n") == null);
 }
 
-test "coverage external lookup only runs when allowed and local ip is missing" {
+test "coverage external lookup runs in automatic mode unless explicitly overridden" {
     try std.testing.expect(ip.shouldLookupExternalAddress("", "", true));
-    try std.testing.expect(!ip.shouldLookupExternalAddress("192.0.2.10", "", true));
+    try std.testing.expect(ip.shouldLookupExternalAddress("192.0.2.10", "", true));
+    try std.testing.expect(ip.shouldLookupExternalAddress("203.0.113.9", "", true));
     try std.testing.expect(!ip.shouldLookupExternalAddress("", "198.51.100.8", true));
     try std.testing.expect(!ip.shouldLookupExternalAddress("", "", false));
 }

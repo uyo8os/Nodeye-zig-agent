@@ -260,7 +260,7 @@ fn applyIpConfig(allocator: std.mem.Allocator, cfg: config.Config, info: *common
         info.ipv4 = cfg.custom_ipv4;
         debug.log("using custom IPv4 override: {s}", .{info.ipv4});
     } else if (ip.shouldLookupExternalAddress(info.ipv4, cfg.custom_ipv4, allow_external_ip_lookup)) {
-        debug.log("local IPv4 missing, probing public IPv4", .{});
+        debug.log("probing public IPv4 (current={s})", .{info.ipv4});
         info.ipv4 = try ip.getIPv4Address(allocator, cfg);
         debug.log("public IPv4 probe result: {s}", .{info.ipv4});
     } else if (!allow_external_ip_lookup and info.ipv4.len == 0) {
@@ -274,7 +274,7 @@ fn applyIpConfig(allocator: std.mem.Allocator, cfg: config.Config, info: *common
         if (!provider.canProbeIpv6(allocator, cfg.include_nics, cfg.exclude_nics)) {
             debug.log("skipping public IPv6 lookup because no usable IPv6 route was detected", .{});
         } else {
-            debug.log("local IPv6 missing, probing public IPv6", .{});
+            debug.log("probing public IPv6 (current={s})", .{info.ipv6});
             info.ipv6 = try ip.getIPv6Address(allocator, cfg);
             debug.log("public IPv6 probe result: {s}", .{info.ipv6});
         }
