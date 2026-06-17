@@ -1,5 +1,5 @@
 const std = @import("std");
-const debug = @import("debug.zig");
+const debug = @import("debug");
 const http = @import("http.zig");
 const idna = @import("idna");
 const raw_conn = @import("raw_conn.zig");

@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const dns = @import("dns");
 const compat = @import("compat");
-const debug = @import("debug.zig");
+const debug = @import("debug");
 const net = @import("net");
 
 /// Raw TCP/TLS connection wrapper used by HTTP and websocket clients.

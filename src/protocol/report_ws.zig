@@ -1,6 +1,6 @@
 const std = @import("std");
 const config = @import("../config.zig");
-const debug = @import("debug.zig");
+const debug = @import("debug");
 const http = @import("http.zig");
 const common = @import("../platform/common.zig");
 const provider = @import("../platform/provider.zig");

@@ -38,7 +38,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const debug_module = b.createModule(.{
-        .root_source_file = b.path("src/debug.zig"),
+        .root_source_file = b.path("src/protocol/debug.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -66,6 +66,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("runtime", runtime_module);
     if (zigpty_module) |mod| exe.root_module.addImport("zigpty", mod);
     addCompatImports(exe.root_module, compat_module, net_module);
+    exe.root_module.addImport("debug", debug_module);
     if (target.result.os.tag == .linux or target.result.os.tag == .freebsd or target.result.os.tag == .macos) {
         exe.root_module.linkSystemLibrary("c", .{});
     }
@@ -236,6 +237,7 @@ fn addTest(
         .optimize = optimize,
     });
     addCompatImports(protocol_http, compat_module, net_module);
+    protocol_http.addImport("debug", debug_module);
     protocol_http.addImport("idna", idna_module);
     protocol_http.addImport("dns", dns_module);
     tests.root_module.addImport("protocol_http", protocol_http);
@@ -245,6 +247,7 @@ fn addTest(
         .optimize = optimize,
     });
     addCompatImports(protocol_raw_conn, compat_module, net_module);
+    protocol_raw_conn.addImport("debug", debug_module);
     protocol_raw_conn.addImport("dns", dns_module);
     tests.root_module.addImport("protocol_raw_conn", protocol_raw_conn);
     const update_module = b.createModule(.{
@@ -253,6 +256,7 @@ fn addTest(
         .optimize = optimize,
     });
     addCompatImports(update_module, compat_module, net_module);
+    update_module.addImport("debug", debug_module);
     update_module.addOptions("build_options", opts);
     update_module.addImport("idna", idna_module);
     update_module.addImport("dns", dns_module);
@@ -286,6 +290,7 @@ fn addTest(
         .optimize = optimize,
     });
     addCompatImports(protocol_ping, compat_module, net_module);
+    protocol_ping.addImport("debug", debug_module);
     protocol_ping.addImport("dns", dns_module);
     tests.root_module.addImport("protocol_ping", protocol_ping);
     const protocol_ip = b.createModule(.{
@@ -294,6 +299,7 @@ fn addTest(
         .optimize = optimize,
     });
     addCompatImports(protocol_ip, compat_module, net_module);
+    protocol_ip.addImport("debug", debug_module);
     protocol_ip.addImport("idna", idna_module);
     protocol_ip.addImport("dns", dns_module);
     tests.root_module.addImport("protocol_ip", protocol_ip);
@@ -308,6 +314,7 @@ fn addTest(
         .optimize = optimize,
     });
     addCompatImports(protocol_ws_client, compat_module, net_module);
+    protocol_ws_client.addImport("debug", debug_module);
     protocol_ws_client.addImport("idna", idna_module);
     tests.root_module.addImport("protocol_ws_client", protocol_ws_client);
     tests.root_module.addImport("protocol_report_timing", b.createModule(.{
