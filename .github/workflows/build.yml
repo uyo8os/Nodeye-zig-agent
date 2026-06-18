@@ -189,6 +189,7 @@ jobs:
           set -eu
           sudo sysctl -w net.ipv4.ping_group_range='0 2147483647' >/dev/null
           python3 -m py_compile scripts/mock_komari_business_e2e.py
+          python3 -m py_compile scripts/mock_komari_v2_e2e.py
           python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent --cf --no-exec
           python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent
           python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent --terminal --no-exec
@@ -196,6 +197,9 @@ jobs:
           python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent --proxy --no-exec
           python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent --custom-dns --no-exec
           python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent --no-exec --sudo-agent --tcp-ping-count 10 --http-ping-count 2 --icmp-ping-count 2
+          python3 scripts/mock_komari_v2_e2e.py ws zig-out/bin/komari-agent --terminal
+          python3 scripts/mock_komari_v2_e2e.py post-fallback zig-out/bin/komari-agent
+          python3 scripts/mock_komari_v2_e2e.py post-recover zig-out/bin/komari-agent
       - name: Run self-update E2E
         run: |
           set -eu

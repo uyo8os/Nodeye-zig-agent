@@ -23,6 +23,7 @@ pub fn basicInfo(allocator: std.mem.Allocator) !common.BasicInfo {
             .name = try commandFirstLine(allocator, &.{ "sysctl", "-n", "machdep.cpu.brand_string" }, "Unknown"),
             .architecture = normalizeArch(@tagName(@import("builtin").cpu.arch)),
             .cores = @intCast(std.Thread.getCpuCount() catch 1),
+            .physical_cores = @intCast(sysctlInt(allocator, "hw.physicalcpu") catch 0),
             .usage = 0.001,
         },
         .os_name = try commandFirstLine(allocator, &.{ "sw_vers", "-productName" }, "macOS"),

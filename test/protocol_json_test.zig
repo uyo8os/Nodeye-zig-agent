@@ -8,6 +8,7 @@ test "basic info payload matches golden json" {
     try types.writeBasicInfoJson(&out.writer, .{
         .cpu_name = "CPU",
         .cpu_cores = 4,
+        .cpu_physical_cores = 2,
         .arch = "amd64",
         .os = "linux",
         .kernel_version = "6.1.0",
@@ -19,7 +20,7 @@ test "basic info payload matches golden json" {
         .gpu_name = "GPU",
         .virtualization = "kvm",
         .version = "0.0.1",
-    }, true);
+    }, true, true);
     try expectJsonEqual(out.written(), @embedFile("golden/basic_info.json"));
 }
 

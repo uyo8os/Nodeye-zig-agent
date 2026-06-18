@@ -142,6 +142,7 @@ pub fn build(b: *std.Build) void {
         "test/coverage_test.zig",
         "src/terminal_test.zig",
         "test/ws_message_test.zig",
+        "test/v2_state_test.zig",
         "test/ws_client_test.zig",
         "test/raw_conn_test.zig",
         "test/thread_stack_test.zig",
@@ -152,6 +153,8 @@ pub fn build(b: *std.Build) void {
     for (test_paths) |test_path| {
         addTest(b, test_step, test_path, target, optimize, opts, version_module, compat_module, net_module, debug_module, coverage, coverage_dir);
     }
+    addStandaloneV2Test(b, test_step, "basic_info_v2_test.zig", target, optimize, opts, compat_module, net_module, debug_module, zigpty_module);
+    addStandaloneV2Test(b, test_step, "report_ws_v2_test.zig", target, optimize, opts, compat_module, net_module, debug_module, zigpty_module);
 }
 
 fn addCompatImports(module: *std.Build.Module, compat_module: *std.Build.Module, net_module: *std.Build.Module) void {
@@ -283,6 +286,9 @@ fn addTest(
         .optimize = optimize,
     });
     addCompatImports(protocol_task, compat_module, net_module);
+    protocol_task.addImport("debug", debug_module);
+    protocol_task.addImport("idna", idna_module);
+    protocol_task.addImport("dns", dns_module);
     tests.root_module.addImport("protocol_task", protocol_task);
     const protocol_ping = b.createModule(.{
         .root_source_file = b.path("src/protocol/ping.zig"),
@@ -305,6 +311,11 @@ fn addTest(
     tests.root_module.addImport("protocol_ip", protocol_ip);
     tests.root_module.addImport("protocol_ws_message", b.createModule(.{
         .root_source_file = b.path("src/protocol/ws_message.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    tests.root_module.addImport("protocol_v2_state", b.createModule(.{
+        .root_source_file = b.path("src/protocol/v2_state.zig"),
         .target = target,
         .optimize = optimize,
     }));
@@ -343,6 +354,58 @@ fn addTest(
         run_tests.step.dependOn(&make_coverage_dir.step);
         test_step.dependOn(&run_tests.step);
         return;
+    }
+
+    const run_tests = b.addRunArtifact(tests);
+    test_step.dependOn(&run_tests.step);
+}
+
+fn addStandaloneV2Test(
+    b: *std.Build,
+    test_step: *std.Build.Step,
+    path: []const u8,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    opts: *std.Build.Step.Options,
+    compat_module: *std.Build.Module,
+    net_module: *std.Build.Module,
+    debug_module: *std.Build.Module,
+    zigpty_module: ?*std.Build.Module,
+) void {
+    const tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path(path),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    tests.root_module.addOptions("build_options", opts);
+    addCompatImports(tests.root_module, compat_module, net_module);
+    tests.root_module.addImport("debug", debug_module);
+    const idna_module = b.createModule(.{
+        .root_source_file = b.path("src/idna.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const dns_module = b.createModule(.{
+        .root_source_file = b.path("src/dns.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    addCompatImports(dns_module, compat_module, net_module);
+    tests.root_module.addImport("idna", idna_module);
+    tests.root_module.addImport("dns", dns_module);
+    const report_netstatic = b.createModule(.{
+        .root_source_file = b.path("src/report/netstatic.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    addCompatImports(report_netstatic, compat_module, net_module);
+    tests.root_module.addImport("report_netstatic", report_netstatic);
+    if (zigpty_module) |mod| tests.root_module.addImport("zigpty", mod);
+    if (target.result.os.tag == .windows) {
+        tests.root_module.linkSystemLibrary("advapi32", .{});
+        tests.root_module.linkSystemLibrary("iphlpapi", .{});
     }
 
     const run_tests = b.addRunArtifact(tests);

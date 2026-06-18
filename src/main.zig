@@ -10,6 +10,7 @@ const ip = @import("protocol/ip.zig");
 const netstatic = @import("report_netstatic");
 const ping = @import("protocol/ping.zig");
 const report_ws = @import("protocol/report_ws.zig");
+const v2_state = @import("protocol/v2_state.zig");
 const update = @import("update.zig");
 const version = @import("version.zig");
 const builtin = @import("builtin");
@@ -45,6 +46,9 @@ pub fn main(init: std.process.Init.Minimal) !void {
     var cfg = try config.parseArgs(config_allocator, args);
     try cfg.loadEnv(config_allocator);
     if (cfg.config_file.len != 0) try cfg.loadJsonFile(config_allocator, cfg.config_file);
+    try cfg.normalize();
+    v2_state.initRequestedProtocolVersion(cfg.protocol_version);
+    v2_state.resetConnectionProtocolVersion();
     debug.setEnabled(cfg.debug_log);
 
     if (cfg.command == .list_disk) {
@@ -206,7 +210,7 @@ fn uploadBasicInfoOnce(allocator: std.mem.Allocator, cfg: config.Config, allow_e
         debug.log("deferring foreground basic info upload until public IP refresh because IPv4 is empty", .{});
         return error.BasicInfoDeferredUntilPublicIp;
     }
-    const info_json = try basic_info.allocBasicInfoJson(scratch, info, true);
+    const info_json = try basic_info.allocBasicInfoJson(scratch, info, true, true);
     try stdout.print("Basic info ready: {d} bytes\n", .{info_json.len});
     debug.log("basic info prepared: upload_bytes={d} final_ipv4={s} final_ipv6={s}", .{ info_json.len, info.ipv4, info.ipv6 });
     try basic_info.upload(scratch, cfg, info);

@@ -33,6 +33,8 @@ var cached_disk: ?CachedDiskSample = null;
 var cached_connections: ?CachedConnectionsSample = null;
 var cached_process: ?CachedProcessSample = null;
 var cached_cpu_cores = std.atomic.Value(u32).init(0);
+const unknown_cpu_physical_cores = std.math.maxInt(u32);
+var cached_cpu_physical_cores = std.atomic.Value(u32).init(unknown_cpu_physical_cores);
 
 const disk_cache_ttl_ms: u64 = 30 * 1000;
 const connections_cache_ttl_ms: u64 = 5 * 1000;
@@ -87,6 +89,7 @@ pub fn basicInfo(allocator: std.mem.Allocator) !common.BasicInfo {
             .name = try cpuName(allocator),
             .architecture = normalizeArch(@tagName(@import("builtin").cpu.arch)),
             .cores = try cpuCoreCount(),
+            .physical_cores = try cpuPhysicalCoreCount(),
             .usage = 0.001,
         },
         .os_name = try osName(allocator),
@@ -135,6 +138,155 @@ fn cpuCoreCount() !u32 {
     const count: u32 = @intCast(try std.Thread.getCpuCount());
     cached_cpu_cores.store(count, .release);
     return count;
+}
+
+fn cpuPhysicalCoreCount() !u32 {
+    const cached = cached_cpu_physical_cores.load(.acquire);
+    if (cached != unknown_cpu_physical_cores) return cached;
+
+    const count = cpuPhysicalCoreCountFromProcCpuInfo() catch 0;
+    cached_cpu_physical_cores.store(count, .release);
+    return count;
+}
+
+fn cpuPhysicalCoreCountFromProcCpuInfo() !u32 {
+    const bytes = compat.readFileAlloc(std.heap.page_allocator, "/proc/cpuinfo", 256 * 1024) catch return 0;
+    defer std.heap.page_allocator.free(bytes);
+    return parseCpuPhysicalCoreCountFromCpuInfo(std.heap.page_allocator, bytes) catch 0;
+}
+
+const CpuCorePair = struct {
+    physical_id: []const u8,
+    core_id: []const u8,
+};
+
+const CpuPackageCoreCount = struct {
+    physical_id: []const u8,
+    cpu_cores: u32,
+};
+
+fn parseCpuPhysicalCoreCountFromCpuInfo(allocator: std.mem.Allocator, bytes: []const u8) !u32 {
+    var pairs: std.ArrayList(CpuCorePair) = .empty;
+    defer {
+        for (pairs.items) |pair| {
+            allocator.free(pair.physical_id);
+            allocator.free(pair.core_id);
+        }
+        pairs.deinit(allocator);
+    }
+
+    var packages: std.ArrayList(CpuPackageCoreCount) = .empty;
+    defer {
+        for (packages.items) |pkg| allocator.free(pkg.physical_id);
+        packages.deinit(allocator);
+    }
+
+    var current_physical_id: ?[]const u8 = null;
+    var current_core_id: ?[]const u8 = null;
+    var current_cpu_cores: ?u32 = null;
+    var saw_physical_id = false;
+
+    defer {
+        if (current_physical_id) |id| allocator.free(id);
+        if (current_core_id) |id| allocator.free(id);
+    }
+
+    var lines = std.mem.splitScalar(u8, bytes, '\n');
+    while (lines.next()) |line_raw| {
+        const line = std.mem.trim(u8, line_raw, " \t\r");
+        if (line.len == 0) {
+            try flushCpuInfoSection(allocator, &pairs, &packages, &current_physical_id, &current_core_id, &current_cpu_cores);
+            continue;
+        }
+
+        const idx = std.mem.indexOfScalar(u8, line, ':') orelse continue;
+        const key = std.mem.trim(u8, line[0..idx], " \t");
+        const value = std.mem.trim(u8, line[idx + 1 ..], " \t");
+        if (value.len == 0) continue;
+
+        if (std.ascii.eqlIgnoreCase(key, "physical id")) {
+            if (current_physical_id) |id| allocator.free(id);
+            current_physical_id = try allocator.dupe(u8, value);
+            saw_physical_id = true;
+            continue;
+        }
+
+        if (std.ascii.eqlIgnoreCase(key, "core id")) {
+            if (current_core_id) |id| allocator.free(id);
+            current_core_id = try allocator.dupe(u8, value);
+            continue;
+        }
+
+        if (std.ascii.eqlIgnoreCase(key, "cpu cores")) {
+            current_cpu_cores = std.fmt.parseInt(u32, value, 10) catch null;
+        }
+    }
+
+    try flushCpuInfoSection(allocator, &pairs, &packages, &current_physical_id, &current_core_id, &current_cpu_cores);
+
+    if (pairs.items.len != 0) return @intCast(pairs.items.len);
+    if (packages.items.len != 0 and (saw_physical_id or packages.items.len == 1)) {
+        var total: u32 = 0;
+        for (packages.items) |pkg| total = total +| pkg.cpu_cores;
+        return total;
+    }
+    return 0;
+}
+
+fn flushCpuInfoSection(
+    allocator: std.mem.Allocator,
+    pairs: *std.ArrayList(CpuCorePair),
+    packages: *std.ArrayList(CpuPackageCoreCount),
+    current_physical_id: *?[]const u8,
+    current_core_id: *?[]const u8,
+    current_cpu_cores: *?u32,
+) !void {
+    const physical_id = current_physical_id.* orelse "";
+    if (current_physical_id.* != null and current_core_id.* != null) {
+        const core_id = current_core_id.*.?;
+        if (!cpuCorePairExists(pairs.items, physical_id, core_id)) {
+            try pairs.append(allocator, .{
+                .physical_id = try allocator.dupe(u8, physical_id),
+                .core_id = try allocator.dupe(u8, core_id),
+            });
+        }
+    }
+
+    if (current_cpu_cores.*) |cpu_cores| {
+        if (cpu_cores != 0) try upsertCpuPackageCoreCount(allocator, packages, physical_id, cpu_cores);
+    }
+
+    if (current_physical_id.*) |id| allocator.free(id);
+    if (current_core_id.*) |id| allocator.free(id);
+    current_physical_id.* = null;
+    current_core_id.* = null;
+    current_cpu_cores.* = null;
+}
+
+fn cpuCorePairExists(pairs: []const CpuCorePair, physical_id: []const u8, core_id: []const u8) bool {
+    for (pairs) |pair| {
+        if (std.mem.eql(u8, pair.physical_id, physical_id) and std.mem.eql(u8, pair.core_id, core_id)) return true;
+    }
+    return false;
+}
+
+fn upsertCpuPackageCoreCount(
+    allocator: std.mem.Allocator,
+    packages: *std.ArrayList(CpuPackageCoreCount),
+    physical_id: []const u8,
+    cpu_cores: u32,
+) !void {
+    for (packages.items) |*pkg| {
+        if (std.mem.eql(u8, pkg.physical_id, physical_id)) {
+            if (cpu_cores > pkg.cpu_cores) pkg.cpu_cores = cpu_cores;
+            return;
+        }
+    }
+
+    try packages.append(allocator, .{
+        .physical_id = try allocator.dupe(u8, physical_id),
+        .cpu_cores = cpu_cores,
+    });
 }
 
 pub fn parseOsReleaseName(allocator: std.mem.Allocator, bytes: []const u8) ![]const u8 {
@@ -362,25 +514,85 @@ fn gpuName(allocator: std.mem.Allocator) ![]const u8 {
         if (!std.mem.eql(u8, line, "None")) return line;
         allocator.free(line);
     } else |_| {}
-    if (commandOutputFirstLine(allocator, &.{ "nvidia-smi", "--query-gpu=name", "--format=csv,noheader" })) |line| {
+    if (commandGpuNames(allocator, &.{ "nvidia-smi", "--query-gpu=name", "--format=csv,noheader" })) |line| {
         if (line.len != 0) return line;
         allocator.free(line);
     } else |_| {}
-    if (commandOutputFirstLine(allocator, &.{ "/opt/rocm/bin/rocm-smi", "--showproductname" })) |line| {
+    if (commandGpuNames(allocator, &.{ "/opt/rocm/bin/rocm-smi", "--showproductname" })) |line| {
         if (line.len != 0) return line;
         allocator.free(line);
     } else |_| {}
-    if (commandOutputFirstLine(allocator, &.{ "rocm-smi", "--showproductname" })) |line| {
+    if (commandGpuNames(allocator, &.{ "rocm-smi", "--showproductname" })) |line| {
         if (line.len != 0) return line;
         allocator.free(line);
     } else |_| {}
     return allocator.dupe(u8, "None");
 }
 
+const GpuNameCount = struct {
+    name: []const u8,
+    count: u32,
+};
+
+fn deinitGpuNameCounts(allocator: std.mem.Allocator, counts: *std.ArrayList(GpuNameCount)) void {
+    for (counts.items) |item| allocator.free(item.name);
+    counts.deinit(allocator);
+}
+
+fn appendGpuNameCount(allocator: std.mem.Allocator, counts: *std.ArrayList(GpuNameCount), name_raw: []const u8) !void {
+    const name = std.mem.trim(u8, name_raw, " \t\r\n");
+    if (name.len == 0 or std.mem.eql(u8, name, "None")) return;
+
+    for (counts.items) |*item| {
+        if (std.mem.eql(u8, item.name, name)) {
+            item.count = item.count +| 1;
+            return;
+        }
+    }
+
+    try counts.append(allocator, .{
+        .name = try allocator.dupe(u8, name),
+        .count = 1,
+    });
+}
+
+fn allocFormattedGpuNameCounts(allocator: std.mem.Allocator, counts: []const GpuNameCount) ![]const u8 {
+    if (counts.len == 0) return allocator.dupe(u8, "None");
+
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(allocator);
+
+    for (counts, 0..) |item, idx| {
+        if (idx != 0) try out.appendSlice(allocator, ", ");
+        if (item.count > 1) {
+            try compat.appendPrint(allocator, &out, "{s} × {d}", .{ item.name, item.count });
+        } else {
+            try compat.appendPrint(allocator, &out, "{s}", .{item.name});
+        }
+    }
+
+    return out.toOwnedSlice(allocator);
+}
+
+fn commandGpuNames(allocator: std.mem.Allocator, argv: []const []const u8) ![]const u8 {
+    const output = try commandOutput(allocator, argv);
+    defer allocator.free(output);
+
+    var counts: std.ArrayList(GpuNameCount) = .empty;
+    defer deinitGpuNameCounts(allocator, &counts);
+
+    var lines = std.mem.splitScalar(u8, output, '\n');
+    while (lines.next()) |line| try appendGpuNameCount(allocator, &counts, line);
+
+    return allocFormattedGpuNameCounts(allocator, counts.items);
+}
+
 fn gpuNameFromLspci(allocator: std.mem.Allocator) ![]const u8 {
     const out = commandOutput(allocator, &.{"lspci"}) catch return allocator.dupe(u8, "None");
     defer allocator.free(out);
     const priority = [_][]const u8{ "nvidia", "amd", "radeon", "intel", "arc", "snap", "qualcomm", "snapdragon" };
+    var priority_names: std.ArrayList(GpuNameCount) = .empty;
+    defer deinitGpuNameCounts(allocator, &priority_names);
     var lines = std.mem.splitScalar(u8, out, '\n');
     while (lines.next()) |line| {
         const lower = try std.ascii.allocLowerString(allocator, line);
@@ -389,24 +601,28 @@ fn gpuNameFromLspci(allocator: std.mem.Allocator) ![]const u8 {
         for (&priority) |vendor| {
             if (std.mem.indexOf(u8, lower, vendor) != null) {
                 if (extractPciGpuName(allocator, line)) |name| {
-                    if (!isVirtualGpuName(name)) return name;
-                    allocator.free(name);
+                    defer allocator.free(name);
+                    if (!isVirtualGpuName(name)) try appendGpuNameCount(allocator, &priority_names, name);
                 } else |_| {}
             }
         }
     }
 
+    if (priority_names.items.len != 0) return allocFormattedGpuNameCounts(allocator, priority_names.items);
+
+    var fallback_names: std.ArrayList(GpuNameCount) = .empty;
+    defer deinitGpuNameCounts(allocator, &fallback_names);
     lines = std.mem.splitScalar(u8, out, '\n');
     while (lines.next()) |line| {
         const lower = try std.ascii.allocLowerString(allocator, line);
         defer allocator.free(lower);
         if (!isDisplayPciLine(lower)) continue;
         if (extractPciGpuName(allocator, line)) |name| {
-            if (!isVirtualGpuName(name)) return name;
-            allocator.free(name);
+            defer allocator.free(name);
+            if (!isVirtualGpuName(name)) try appendGpuNameCount(allocator, &fallback_names, name);
         } else |_| {}
     }
-    return allocator.dupe(u8, "None");
+    return allocFormattedGpuNameCounts(allocator, fallback_names.items);
 }
 
 fn isDisplayPciLine(lower: []const u8) bool {
@@ -437,25 +653,67 @@ fn gpuNameFromSysfsDrm(allocator: std.mem.Allocator) ![]const u8 {
     var dir = compat.openDir("/sys/class/drm", .{ .iterate = true }) catch return allocator.dupe(u8, "None");
     defer dir.close(std.Options.debug_io);
     var it = dir.iterate();
+    var counts: std.ArrayList(GpuNameCount) = .empty;
+    defer deinitGpuNameCounts(allocator, &counts);
     while (try it.next(std.Options.debug_io)) |entry| {
         if (!std.mem.startsWith(u8, entry.name, "card")) continue;
         if (std.mem.indexOfScalar(u8, entry.name, '-') != null) continue;
         const driver = driverNameForDrmCard(allocator, entry.name) catch continue;
         defer allocator.free(driver);
         if (isExcludedDrmDriver(driver)) continue;
-        if (socModelFromCompatible(allocator, entry.name, driver)) |model| return model else |_| {}
-        if (std.mem.eql(u8, driver, "vc4") or std.mem.eql(u8, driver, "vc4-drm")) return allocator.dupe(u8, "Broadcom VideoCore IV/VI (Raspberry Pi)");
-        if (std.mem.eql(u8, driver, "v3d") or std.mem.eql(u8, driver, "v3d-drm")) return allocator.dupe(u8, "Broadcom V3D (Raspberry Pi 4/5)");
-        if (std.mem.eql(u8, driver, "msm") or std.mem.eql(u8, driver, "msm_drm")) return allocator.dupe(u8, "Qualcomm Adreno (Unknown Model)");
-        if (std.mem.eql(u8, driver, "panfrost")) return allocator.dupe(u8, "ARM Mali (Panfrost)");
-        if (std.mem.eql(u8, driver, "lima")) return allocator.dupe(u8, "ARM Mali (Lima)");
-        if (std.mem.eql(u8, driver, "sun4i-drm") or std.mem.eql(u8, driver, "sunxi-drm")) return allocator.dupe(u8, "Allwinner Display Engine");
-        if (std.mem.eql(u8, driver, "tegra")) return allocator.dupe(u8, "NVIDIA Tegra");
-        if (std.mem.eql(u8, driver, "ast")) return allocator.dupe(u8, "ASPEED Technology, Inc. ASPEED Graphics Family");
-        if (std.mem.eql(u8, driver, "i915") or std.mem.eql(u8, driver, "i915-drm")) return allocator.dupe(u8, "Intel Integrated Graphics");
-        if (std.mem.eql(u8, driver, "mgag200")) return allocator.dupe(u8, "Matrox G200 Series");
-        if (driver.len != 0) return std.fmt.allocPrint(allocator, "Direct Render Manager {s}", .{driver});
+        if (socModelFromCompatible(allocator, entry.name, driver)) |model| {
+            defer allocator.free(model);
+            try appendGpuNameCount(allocator, &counts, model);
+            continue;
+        } else |_| {}
+        if (std.mem.eql(u8, driver, "vc4") or std.mem.eql(u8, driver, "vc4-drm")) {
+            try appendGpuNameCount(allocator, &counts, "Broadcom VideoCore IV/VI (Raspberry Pi)");
+            continue;
+        }
+        if (std.mem.eql(u8, driver, "v3d") or std.mem.eql(u8, driver, "v3d-drm")) {
+            try appendGpuNameCount(allocator, &counts, "Broadcom V3D (Raspberry Pi 4/5)");
+            continue;
+        }
+        if (std.mem.eql(u8, driver, "msm") or std.mem.eql(u8, driver, "msm_drm")) {
+            try appendGpuNameCount(allocator, &counts, "Qualcomm Adreno (Unknown Model)");
+            continue;
+        }
+        if (std.mem.eql(u8, driver, "panfrost")) {
+            try appendGpuNameCount(allocator, &counts, "ARM Mali (Panfrost)");
+            continue;
+        }
+        if (std.mem.eql(u8, driver, "lima")) {
+            try appendGpuNameCount(allocator, &counts, "ARM Mali (Lima)");
+            continue;
+        }
+        if (std.mem.eql(u8, driver, "sun4i-drm") or std.mem.eql(u8, driver, "sunxi-drm")) {
+            try appendGpuNameCount(allocator, &counts, "Allwinner Display Engine");
+            continue;
+        }
+        if (std.mem.eql(u8, driver, "tegra")) {
+            try appendGpuNameCount(allocator, &counts, "NVIDIA Tegra");
+            continue;
+        }
+        if (std.mem.eql(u8, driver, "ast")) {
+            try appendGpuNameCount(allocator, &counts, "ASPEED Technology, Inc. ASPEED Graphics Family");
+            continue;
+        }
+        if (std.mem.eql(u8, driver, "i915") or std.mem.eql(u8, driver, "i915-drm")) {
+            try appendGpuNameCount(allocator, &counts, "Intel Integrated Graphics");
+            continue;
+        }
+        if (std.mem.eql(u8, driver, "mgag200")) {
+            try appendGpuNameCount(allocator, &counts, "Matrox G200 Series");
+            continue;
+        }
+        if (driver.len != 0) {
+            const name = try std.fmt.allocPrint(allocator, "Direct Render Manager {s}", .{driver});
+            defer allocator.free(name);
+            try appendGpuNameCount(allocator, &counts, name);
+        }
     }
+
+    if (counts.items.len != 0) return allocFormattedGpuNameCounts(allocator, counts.items);
 
     const model = compat.readFileAlloc(allocator, "/sys/firmware/devicetree/base/model", 4096) catch return allocator.dupe(u8, "None");
     defer allocator.free(model);

@@ -4,6 +4,7 @@ const std = @import("std");
 pub const BasicInfoPayload = struct {
     cpu_name: []const u8,
     cpu_cores: u32,
+    cpu_physical_cores: u32 = 0,
     arch: []const u8,
     os: []const u8,
     kernel_version: []const u8,
@@ -80,10 +81,11 @@ pub const ReportPayload = struct {
     message: []const u8,
 };
 
-pub fn writeBasicInfoJson(writer: anytype, payload: BasicInfoPayload, include_kernel_version: bool) !void {
+pub fn writeBasicInfoJson(writer: anytype, payload: BasicInfoPayload, include_kernel_version: bool, include_physical_cores: bool) !void {
     try writer.writeAll("{");
     try writeField(writer, "cpu_name", payload.cpu_name, false);
     try writeIntField(writer, "cpu_cores", payload.cpu_cores, true);
+    if (include_physical_cores) try writeIntField(writer, "cpu_physical_cores", payload.cpu_physical_cores, true);
     try writeField(writer, "arch", payload.arch, true);
     try writeField(writer, "os", payload.os, true);
     if (include_kernel_version) try writeField(writer, "kernel_version", payload.kernel_version, true);

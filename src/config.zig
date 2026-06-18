@@ -21,6 +21,9 @@ pub const Config = struct {
     max_retries: i32 = 3,
     reconnect_interval: i32 = 5,
     info_report_interval: i32 = 5,
+    protocol_version: i32 = 2,
+    disable_compression: bool = false,
+    prefer_ip_version: []const u8 = "",
     include_nics: []const u8 = "",
     exclude_nics: []const u8 = "",
     include_mountpoints: []const u8 = "",
@@ -59,6 +62,9 @@ pub const Config = struct {
         try setIntJson(object, "max_retries", &self.max_retries);
         try setIntJson(object, "reconnect_interval", &self.reconnect_interval);
         try setIntJson(object, "info_report_interval", &self.info_report_interval);
+        try setIntJson(object, "protocol_version", &self.protocol_version);
+        try setBoolJson(object, "disable_compression", &self.disable_compression);
+        try setStringJson(allocator, object, "prefer_ip_version", &self.prefer_ip_version);
         try setStringJson(allocator, object, "include_nics", &self.include_nics);
         try setStringJson(allocator, object, "exclude_nics", &self.exclude_nics);
         try setStringJson(allocator, object, "include_mountpoints", &self.include_mountpoints);
@@ -96,6 +102,8 @@ pub const Config = struct {
         setIntEnv("AGENT_MAX_RETRIES", &self.max_retries);
         setIntEnv("AGENT_RECONNECT_INTERVAL", &self.reconnect_interval);
         setIntEnv("AGENT_INFO_REPORT_INTERVAL", &self.info_report_interval);
+        setIntEnv("AGENT_PROTOCOL_VERSION", &self.protocol_version);
+        setBoolEnv("AGENT_DISABLE_COMPRESSION", &self.disable_compression);
         try setStringEnv(allocator, "AGENT_INCLUDE_NICS", &self.include_nics);
         try setStringEnv(allocator, "AGENT_EXCLUDE_NICS", &self.exclude_nics);
         try setStringEnv(allocator, "AGENT_INCLUDE_MOUNTPOINTS", &self.include_mountpoints);
@@ -105,6 +113,7 @@ pub const Config = struct {
         setBoolEnv("AGENT_MEMORY_INCLUDE_CACHE", &self.memory_include_cache);
         setBoolEnv("AGENT_MEMORY_REPORT_RAW_USED", &self.memory_report_raw_used);
         try setStringEnv(allocator, "AGENT_CUSTOM_DNS", &self.custom_dns);
+        try setStringEnv(allocator, "AGENT_PREFER_IP_VERSION", &self.prefer_ip_version);
         setBoolEnv("AGENT_ENABLE_GPU", &self.enable_gpu);
         setBoolEnv("AGENT_SHOW_WARNING", &self.show_warning);
         setBoolEnv("AGENT_DEBUG_LOG", &self.debug_log);
@@ -113,6 +122,14 @@ pub const Config = struct {
         setBoolEnv("AGENT_GET_IP_ADDR_FROM_NIC", &self.get_ip_addr_from_nic);
         try setStringEnv(allocator, "HOST_PROC", &self.host_proc);
         try setStringEnv(allocator, "AGENT_CONFIG_FILE", &self.config_file);
+    }
+
+    pub fn normalize(self: *Config) !void {
+        if (self.protocol_version == 0) self.protocol_version = 2;
+        if (self.protocol_version != 1 and self.protocol_version != 2) return error.InvalidProtocolVersion;
+        if (self.prefer_ip_version.len != 0 and !std.mem.eql(u8, self.prefer_ip_version, "4") and !std.mem.eql(u8, self.prefer_ip_version, "6")) {
+            return error.InvalidPreferIpVersion;
+        }
     }
 };
 
@@ -143,6 +160,10 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !Config
             cfg.reconnect_interval = try std.fmt.parseInt(i32, v, 10);
         } else if (optionValue(arg, "--info-report-interval")) |v| {
             cfg.info_report_interval = try std.fmt.parseInt(i32, v, 10);
+        } else if (optionValue(arg, "--protocol-version")) |v| {
+            cfg.protocol_version = try std.fmt.parseInt(i32, v, 10);
+        } else if (optionValue(arg, "--prefer-ip-version")) |v| {
+            cfg.prefer_ip_version = try allocator.dupe(u8, v);
         } else if (optionValue(arg, "--include-nics")) |v| {
             cfg.include_nics = try allocator.dupe(u8, v);
         } else if (optionValue(arg, "--exclude-nics")) |v| {
@@ -173,6 +194,8 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !Config
             cfg.memory_include_cache = v;
         } else if (boolOptionValue(arg, "--memory-exclude-bcf")) |v| {
             cfg.memory_report_raw_used = v;
+        } else if (boolOptionValue(arg, "--disable-compression")) |v| {
+            cfg.disable_compression = v;
         } else if (boolOptionValue(arg, "--gpu")) |v| {
             cfg.enable_gpu = v;
         } else if (boolOptionValue(arg, "--show-warning")) |v| {
@@ -201,6 +224,10 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !Config
             if (nextValue(args, &i)) |v| cfg.reconnect_interval = try std.fmt.parseInt(i32, v, 10);
         } else if (std.mem.eql(u8, arg, "--info-report-interval")) {
             if (nextValue(args, &i)) |v| cfg.info_report_interval = try std.fmt.parseInt(i32, v, 10);
+        } else if (std.mem.eql(u8, arg, "--protocol-version")) {
+            if (nextValue(args, &i)) |v| cfg.protocol_version = try std.fmt.parseInt(i32, v, 10);
+        } else if (std.mem.eql(u8, arg, "--prefer-ip-version")) {
+            if (nextValue(args, &i)) |v| cfg.prefer_ip_version = try allocator.dupe(u8, v);
         } else if (std.mem.eql(u8, arg, "--include-nics")) {
             if (nextValue(args, &i)) |v| cfg.include_nics = try allocator.dupe(u8, v);
         } else if (std.mem.eql(u8, arg, "--exclude-nics")) {
@@ -217,6 +244,8 @@ pub fn parseArgs(allocator: std.mem.Allocator, args: []const []const u8) !Config
             cfg.memory_include_cache = true;
         } else if (std.mem.eql(u8, arg, "--memory-exclude-bcf")) {
             cfg.memory_report_raw_used = true;
+        } else if (std.mem.eql(u8, arg, "--disable-compression")) {
+            cfg.disable_compression = true;
         } else if (std.mem.eql(u8, arg, "--custom-dns")) {
             if (nextValue(args, &i)) |v| cfg.custom_dns = try allocator.dupe(u8, v);
         } else if (std.mem.eql(u8, arg, "--gpu")) {

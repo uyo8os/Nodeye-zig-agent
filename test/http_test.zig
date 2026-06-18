@@ -17,6 +17,10 @@ test "endpoint helpers trim slash and place token query" {
         try http.taskResultUrl(allocator, "https://panel.example/", "tok"),
     );
     try std.testing.expectEqualStrings(
+        "https://panel.example/api/clients/v2/rpc?token=tok",
+        try http.v2RpcUrl(allocator, "https://panel.example/", "tok"),
+    );
+    try std.testing.expectEqualStrings(
         "https://panel.example/api/clients/register?name=host%20one",
         try http.registerUrl(allocator, "https://panel.example/", "host one"),
     );
@@ -36,6 +40,10 @@ test "websocket helpers convert scheme" {
         try http.reportWsUrl(allocator, "https://panel.example/", "tok"),
     );
     try std.testing.expectEqualStrings(
+        "wss://panel.example/api/clients/v2/rpc?token=tok",
+        try http.reportWsUrlForProtocol(allocator, "https://panel.example/", "tok", 2),
+    );
+    try std.testing.expectEqualStrings(
         "ws://panel.example/api/clients/terminal?token=tok&id=req",
         try http.terminalWsUrl(allocator, "http://panel.example/", "tok", "req"),
     );
@@ -43,6 +51,12 @@ test "websocket helpers convert scheme" {
         "wspanel.example/api/clients/report?token=tok",
         try http.reportWsUrl(allocator, "panel.example/", "tok"),
     );
+}
+
+test "dashboard address family follows prefer ip version" {
+    try std.testing.expectEqualStrings("any", @tagName(http.dashboardAddressFamily(config.Config{})));
+    try std.testing.expectEqualStrings("ipv4", @tagName(http.dashboardAddressFamily(config.Config{ .prefer_ip_version = "4" })));
+    try std.testing.expectEqualStrings("ipv6", @tagName(http.dashboardAddressFamily(config.Config{ .prefer_ip_version = "6" })));
 }
 
 test "cloudflare access headers are added when both values exist" {

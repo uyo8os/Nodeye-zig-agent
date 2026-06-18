@@ -1,4 +1,5 @@
 const std = @import("std");
+const flate = std.compress.flate;
 const idna = @import("idna");
 const raw_conn = @import("raw_conn.zig");
 const net = @import("net");
@@ -12,6 +13,8 @@ pub const default_timeout_ms: u64 = 30_000;
 pub const Headers = struct {
     cf_access_client_id: ?[]const u8 = null,
     cf_access_client_secret: ?[]const u8 = null,
+    authorization: ?[]const u8 = null,
+    content_encoding: ?[]const u8 = null,
 };
 
 pub const ClientOptions = struct {
@@ -165,11 +168,24 @@ pub fn postJsonRead(allocator: std.mem.Allocator, url: []const u8, payload: []co
 }
 
 pub fn postJsonReadAuth(allocator: std.mem.Allocator, url: []const u8, payload: []const u8, cfg: anytype, bearer_token: []const u8) ![]u8 {
+    return postJsonReadAuthHeaders(allocator, url, payload, cfg, bearer_token, .{});
+}
+
+pub fn postJsonReadAuthHeaders(
+    allocator: std.mem.Allocator,
+    url: []const u8,
+    payload: []const u8,
+    cfg: anytype,
+    bearer_token: []const u8,
+    extra_headers: Headers,
+) ![]u8 {
     const ascii_url = try idna.convertUrlToAscii(allocator, url);
     defer allocator.free(ascii_url);
     const authorization = if (bearer_token.len == 0) "" else try std.fmt.allocPrint(allocator, "Bearer {s}", .{bearer_token});
     defer if (bearer_token.len != 0) allocator.free(authorization);
-    return requestReadAuth(allocator, ascii_url, "POST", payload, "application/json", cfg, authorization);
+    var headers = extra_headers;
+    if (authorization.len != 0) headers.authorization = authorization;
+    return requestReadWithFamilyHeaders(allocator, ascii_url, "POST", payload, "application/json", cfg, dashboardAddressFamily(cfg), "komari-zig-agent", headers);
 }
 
 pub fn getRead(allocator: std.mem.Allocator, url: []const u8) ![]u8 {
@@ -226,6 +242,12 @@ pub fn basicInfoUrl(allocator: std.mem.Allocator, endpoint: []const u8, token: [
     return idna.convertUrlToAscii(allocator, raw);
 }
 
+pub fn v2RpcUrl(allocator: std.mem.Allocator, endpoint: []const u8, token: []const u8) ![]const u8 {
+    const raw = try std.fmt.allocPrint(allocator, "{s}/api/clients/v2/rpc?token={s}", .{ trimEndpoint(endpoint), token });
+    defer allocator.free(raw);
+    return idna.convertUrlToAscii(allocator, raw);
+}
+
 pub fn taskResultUrl(allocator: std.mem.Allocator, endpoint: []const u8, token: []const u8) ![]const u8 {
     const raw = try std.fmt.allocPrint(allocator, "{s}/api/clients/task/result?token={s}", .{ trimEndpoint(endpoint), token });
     defer allocator.free(raw);
@@ -241,9 +263,16 @@ pub fn registerUrl(allocator: std.mem.Allocator, endpoint: []const u8, hostname:
 }
 
 pub fn reportWsUrl(allocator: std.mem.Allocator, endpoint: []const u8, token: []const u8) ![]const u8 {
+    return reportWsUrlForProtocol(allocator, endpoint, token, 1);
+}
+
+pub fn reportWsUrlForProtocol(allocator: std.mem.Allocator, endpoint: []const u8, token: []const u8, protocol_version: i32) ![]const u8 {
     const base = try wsEndpoint(allocator, endpoint);
     defer allocator.free(base);
-    const raw = try std.fmt.allocPrint(allocator, "{s}/api/clients/report?token={s}", .{ trimEndpoint(base), token });
+    const raw = if (protocol_version >= 2)
+        try std.fmt.allocPrint(allocator, "{s}/api/clients/v2/rpc?token={s}", .{ trimEndpoint(base), token })
+    else
+        try std.fmt.allocPrint(allocator, "{s}/api/clients/report?token={s}", .{ trimEndpoint(base), token });
     defer allocator.free(raw);
     return idna.convertUrlToAscii(allocator, raw);
 }
@@ -283,6 +312,27 @@ fn postHeaders(cfg: anytype, authorization: []const u8, out: *[3]std.http.Header
         len += 1;
     }
     return out[0..len];
+}
+
+pub fn dashboardAddressFamily(cfg: anytype) raw_conn.AddressFamily {
+    if (@hasField(@TypeOf(cfg), "prefer_ip_version")) {
+        const prefer = @field(cfg, "prefer_ip_version");
+        if (std.mem.eql(u8, prefer, "4")) return .ipv4;
+        if (std.mem.eql(u8, prefer, "6")) return .ipv6;
+    }
+    return .any;
+}
+
+pub fn maybeGzip(allocator: std.mem.Allocator, payload: []const u8, enabled: bool) !struct { body: []u8, compressed: bool } {
+    if (!enabled or payload.len == 0) return .{ .body = try allocator.dupe(u8, payload), .compressed = false };
+
+    var out = try std.Io.Writer.Allocating.initCapacity(allocator, payload.len + 64);
+    errdefer out.deinit();
+    var deflate_buf: [flate.max_window_len * 2]u8 = undefined;
+    var gzip = try flate.Compress.init(&out.writer, deflate_buf[0..], .gzip, .default);
+    try gzip.writer.writeAll(payload);
+    try gzip.finish();
+    return .{ .body = try out.toOwnedSlice(), .compressed = true };
 }
 
 fn wsEndpoint(allocator: std.mem.Allocator, endpoint: []const u8) ![]const u8 {
@@ -390,12 +440,26 @@ fn requestReadWithFamily(allocator: std.mem.Allocator, url: []const u8, method: 
 }
 
 fn requestReadWithFamilyAuth(allocator: std.mem.Allocator, url: []const u8, method: []const u8, payload: []const u8, content_type: []const u8, cfg: anytype, family: raw_conn.AddressFamily, user_agent: []const u8, authorization: []const u8) ![]u8 {
+    return requestReadWithFamilyHeaders(allocator, url, method, payload, content_type, cfg, family, user_agent, .{ .authorization = if (authorization.len == 0) null else authorization });
+}
+
+fn requestReadWithFamilyHeaders(
+    allocator: std.mem.Allocator,
+    url: []const u8,
+    method: []const u8,
+    payload: []const u8,
+    content_type: []const u8,
+    cfg: anytype,
+    family: raw_conn.AddressFamily,
+    user_agent: []const u8,
+    headers: Headers,
+) ![]u8 {
     var current_url: []const u8 = try allocator.dupe(u8, url);
     defer allocator.free(current_url);
     var redirects: u32 = 0;
     const timeout_ms = timeoutMsForConfig(cfg);
     while (true) {
-        var response = try requestReadWithFamilyAuthOnce(allocator, current_url, method, payload, content_type, cfg, family, user_agent, authorization, timeout_ms);
+        var response = try requestReadWithFamilyHeadersOnce(allocator, current_url, method, payload, content_type, cfg, family, user_agent, headers, timeout_ms);
         errdefer response.deinit(allocator);
         if (response.status == 200) return response.body;
         if (isRedirectStatus(response.status)) {
@@ -413,7 +477,18 @@ fn requestReadWithFamilyAuth(allocator: std.mem.Allocator, url: []const u8, meth
     }
 }
 
-fn requestReadWithFamilyAuthOnce(allocator: std.mem.Allocator, url: []const u8, method: []const u8, payload: []const u8, content_type: []const u8, cfg: anytype, family: raw_conn.AddressFamily, user_agent: []const u8, authorization: []const u8, timeout_ms: u64) !HttpResponse {
+fn requestReadWithFamilyHeadersOnce(
+    allocator: std.mem.Allocator,
+    url: []const u8,
+    method: []const u8,
+    payload: []const u8,
+    content_type: []const u8,
+    cfg: anytype,
+    family: raw_conn.AddressFamily,
+    user_agent: []const u8,
+    headers: Headers,
+    timeout_ms: u64,
+) !HttpResponse {
     const uri = try std.Uri.parse(url);
     const host = try uriHost(allocator, uri);
     defer allocator.free(host);
@@ -444,7 +519,8 @@ fn requestReadWithFamilyAuthOnce(allocator: std.mem.Allocator, url: []const u8, 
         }
         var cf: [2]std.http.Header = undefined;
         for (cloudflareHeaders(cfg, &cf)) |header| try req.writer.print("{s}: {s}\r\n", .{ header.name, header.value });
-        if (authorization.len != 0) try req.writer.print("Authorization: {s}\r\n", .{authorization});
+        if (headers.authorization) |authorization| try req.writer.print("Authorization: {s}\r\n", .{authorization});
+        if (headers.content_encoding) |content_encoding| try req.writer.print("Content-Encoding: {s}\r\n", .{content_encoding});
         try req.writer.writeAll("\r\n");
         if (payload.len != 0) try req.writer.writeAll(payload);
         const request = try req.toOwnedSlice();

@@ -7,6 +7,9 @@ test "defaults match Go agent" {
     try std.testing.expectEqual(@as(i32, 3), cfg.max_retries);
     try std.testing.expectEqual(@as(i32, 5), cfg.reconnect_interval);
     try std.testing.expectEqual(@as(i32, 5), cfg.info_report_interval);
+    try std.testing.expectEqual(@as(i32, 2), cfg.protocol_version);
+    try std.testing.expect(!cfg.disable_compression);
+    try std.testing.expectEqualStrings("", cfg.prefer_ip_version);
     try std.testing.expect(!cfg.disable_auto_update);
     try std.testing.expect(!cfg.disable_web_ssh);
     try std.testing.expect(!cfg.debug_log);
@@ -41,6 +44,11 @@ test "full go-compatible cli flags parse" {
         "--disable-web-ssh",
         "--info-report-interval",
         "30",
+        "--protocol-version",
+        "2",
+        "--disable-compression",
+        "--prefer-ip-version",
+        "6",
         "--include-nics",
         "eth0,wlan0",
         "--exclude-nics",
@@ -74,6 +82,9 @@ test "full go-compatible cli flags parse" {
     try std.testing.expect(cfg.disable_auto_update);
     try std.testing.expect(cfg.disable_web_ssh);
     try std.testing.expectEqual(@as(i32, 30), cfg.info_report_interval);
+    try std.testing.expectEqual(@as(i32, 2), cfg.protocol_version);
+    try std.testing.expect(cfg.disable_compression);
+    try std.testing.expectEqualStrings("6", cfg.prefer_ip_version);
     try std.testing.expectEqualStrings("eth0,wlan0", cfg.include_nics);
     try std.testing.expectEqualStrings("docker0", cfg.exclude_nics);
     try std.testing.expectEqualStrings("/;/data", cfg.include_mountpoints);
@@ -103,6 +114,9 @@ test "go-style equals cli flags parse" {
         "--interval=2.5",
         "--max-retries=8",
         "--reconnect-interval=13",
+        "--protocol-version=1",
+        "--disable-compression=true",
+        "--prefer-ip-version=4",
         "--include-nics=eth*",
         "--exclude-nics=docker*",
         "--include-mountpoint=/;/data",
@@ -117,6 +131,9 @@ test "go-style equals cli flags parse" {
     try std.testing.expectEqual(@as(f64, 2.5), cfg.interval);
     try std.testing.expectEqual(@as(i32, 8), cfg.max_retries);
     try std.testing.expectEqual(@as(i32, 13), cfg.reconnect_interval);
+    try std.testing.expectEqual(@as(i32, 1), cfg.protocol_version);
+    try std.testing.expect(cfg.disable_compression);
+    try std.testing.expectEqualStrings("4", cfg.prefer_ip_version);
     try std.testing.expectEqualStrings("eth*", cfg.include_nics);
     try std.testing.expectEqualStrings("docker*", cfg.exclude_nics);
     try std.testing.expectEqualStrings("/;/data", cfg.include_mountpoints);
@@ -136,6 +153,7 @@ test "go-style equals bool cli flags parse" {
         "--ignore-unsafe-cert=true",
         "--memory-include-cache=true",
         "--memory-exclude-bcf=true",
+        "--disable-compression=true",
         "--gpu=true",
         "--show-warning=true",
         "--debug-log=true",
@@ -148,6 +166,7 @@ test "go-style equals bool cli flags parse" {
     try std.testing.expect(cfg.ignore_unsafe_cert);
     try std.testing.expect(cfg.memory_include_cache);
     try std.testing.expect(cfg.memory_report_raw_used);
+    try std.testing.expect(cfg.disable_compression);
     try std.testing.expect(cfg.enable_gpu);
     try std.testing.expect(cfg.show_warning);
     try std.testing.expect(cfg.debug_log);
@@ -246,6 +265,9 @@ test "json config keys parse" {
         \\  "max_retries": 9,
         \\  "reconnect_interval": 12,
         \\  "info_report_interval": 30,
+        \\  "protocol_version": 1,
+        \\  "disable_compression": true,
+        \\  "prefer_ip_version": "4",
         \\  "include_nics": "eth0",
         \\  "month_rotate": 15,
         \\  "cf_access_client_id": "id",
@@ -272,6 +294,9 @@ test "json config keys parse" {
     try std.testing.expectEqual(@as(i32, 9), cfg.max_retries);
     try std.testing.expectEqual(@as(i32, 12), cfg.reconnect_interval);
     try std.testing.expectEqual(@as(i32, 30), cfg.info_report_interval);
+    try std.testing.expectEqual(@as(i32, 1), cfg.protocol_version);
+    try std.testing.expect(cfg.disable_compression);
+    try std.testing.expectEqualStrings("4", cfg.prefer_ip_version);
     try std.testing.expectEqualStrings("eth0", cfg.include_nics);
     try std.testing.expectEqual(@as(i32, 15), cfg.month_rotate);
     try std.testing.expectEqualStrings("id", cfg.cf_access_client_id);
@@ -285,4 +310,18 @@ test "json config keys parse" {
     try std.testing.expectEqualStrings("2001:db8::1", cfg.custom_ipv6);
     try std.testing.expect(cfg.get_ip_addr_from_nic);
     try std.testing.expectEqualStrings("/host/proc", cfg.host_proc);
+}
+
+test "config normalize defaults protocol version zero and validates values" {
+    var cfg = config.Config.default();
+    cfg.protocol_version = 0;
+    try cfg.normalize();
+    try std.testing.expectEqual(@as(i32, 2), cfg.protocol_version);
+
+    cfg.protocol_version = 9;
+    try std.testing.expectError(error.InvalidProtocolVersion, cfg.normalize());
+
+    cfg.protocol_version = 2;
+    cfg.prefer_ip_version = "5";
+    try std.testing.expectError(error.InvalidPreferIpVersion, cfg.normalize());
 }

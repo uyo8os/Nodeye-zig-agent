@@ -499,6 +499,7 @@ def run_panel_e2e(args):
         cmd += ["--token", TOKEN]
     cmd += [
         "--disable-auto-update",
+        "--protocol-version", str(args.protocol_version),
         "--max-retries", "0",
         "--reconnect-interval", "1",
         "--info-report-interval", "60",
@@ -600,11 +601,11 @@ def run_self_update_e2e(args):
         try:
             first = subprocess.run([
                 old_path, "--endpoint", f"http://127.0.0.1:{server.server_address[1]}",
-                "--token", TOKEN, "--show-warning=false",
+                "--token", TOKEN, "--protocol-version", str(args.protocol_version), "--show-warning=false",
             ], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=20)
             if first.returncode != 42:
                 raise RuntimeError(f"update did not exit 42: {first.returncode}\n{first.stdout}")
-            second = subprocess.run([old_path, "--show-warning"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10)
+            second = subprocess.run([old_path, "--protocol-version", str(args.protocol_version), "--show-warning"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10)
             if second.returncode != 0:
                 raise RuntimeError(f"updated binary preflight failed: {second.returncode}\n{second.stdout}")
             tcp = TcpAcceptServer(("127.0.0.1", 0), TcpAcceptHandler)
@@ -621,10 +622,13 @@ def run_self_update_e2e(args):
                 old_path,
                 "--endpoint", f"http://127.0.0.1:{panel.server_address[1]}",
                 "--token", TOKEN,
+                "--protocol-version", str(args.protocol_version),
                 "--disable-auto-update",
                 "--max-retries", "0",
                 "--reconnect-interval", "1",
                 "--info-report-interval", "60",
+                "--custom-ipv4", "203.0.113.10",
+                "--custom-ipv6", "2001:db8::10",
             ], os.environ.copy(), 20, output)
             try:
                 while time.monotonic() < deadline:
@@ -645,18 +649,12 @@ def run_self_update_e2e(args):
                 tcp.server_close()
             if os.path.exists(old_path + ".bak") or os.path.exists(old_path + ".update-state.json"):
                 raise RuntimeError("pending update files were not confirmed and cleaned")
-            version_output = []
-            version_proc, version_deadline = run_agent([
+            version = subprocess.run([
                 old_path,
-                "--endpoint", "http://127.0.0.1:9",
-                "--token", TOKEN,
                 "--disable-auto-update",
-                "--max-retries", "0",
-            ], os.environ.copy(), 10, version_output)
-            try:
-                wait_for_output_contains(version_proc, version_output, "Komari Agent v9.9.9", version_deadline)
-            finally:
-                terminate(version_proc)
+            ], env=os.environ.copy(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10)
+            if version.returncode != 0 or "Komari Agent v9.9.9" not in version.stdout:
+                raise RuntimeError(f"updated binary version check failed: {version.returncode}\n{version.stdout}")
 
             rollback_path = os.path.join(tmp, "komari-agent-rollback")
             shutil.copy2(args.new_agent, rollback_path)
@@ -669,6 +667,7 @@ def run_self_update_e2e(args):
                 rollback_path,
                 "--endpoint", f"http://127.0.0.1:{server.server_address[1]}",
                 "--token", TOKEN,
+                "--protocol-version", str(args.protocol_version),
                 "--disable-auto-update",
                 "--max-retries", "0",
             ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10)
@@ -689,6 +688,7 @@ def main():
     sub = parser.add_subparsers(dest="mode", required=True)
     panel = sub.add_parser("panel")
     panel.add_argument("agent")
+    panel.add_argument("--protocol-version", type=int, default=1)
     panel.add_argument("--timeout", type=float, default=35)
     panel.add_argument("--no-exec", action="store_true")
     panel.add_argument("--terminal", action="store_true")
@@ -703,6 +703,7 @@ def main():
     update = sub.add_parser("self-update")
     update.add_argument("--old-agent", required=True)
     update.add_argument("--new-agent", required=True)
+    update.add_argument("--protocol-version", type=int, default=1)
     args = parser.parse_args()
     if args.mode == "panel":
         return run_panel_e2e(args)

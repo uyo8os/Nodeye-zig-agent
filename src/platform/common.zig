@@ -3,6 +3,7 @@ pub const CpuInfo = struct {
     name: []const u8 = "Unknown",
     architecture: []const u8 = "unknown",
     cores: u32 = 1,
+    physical_cores: u32 = 0,
     usage: f64 = 0.001,
 };
 

@@ -58,3 +58,14 @@ test "foreground upload failure during websocket reconnect is tolerated and logg
 
     try std.testing.expectEqualStrings("Basic info upload failed during websocket reconnect: HttpStatusNotOk\n", out.written());
 }
+
+test "foreground upload failure during websocket reconnect keeps protocol failure semantics" {
+    var out = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer out.deinit();
+
+    const outcome = try flow.handleForegroundUploadResult(&out.writer, .websocket_reconnect, error.InvalidV2Response);
+    switch (outcome) {
+        .success, .deferred => return error.TestUnexpectedResult,
+        .failure => |err| try std.testing.expectEqual(error.InvalidV2Response, err),
+    }
+}

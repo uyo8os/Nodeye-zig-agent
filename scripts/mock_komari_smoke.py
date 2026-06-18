@@ -250,6 +250,7 @@ def drain_output(pipe, lines):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("agent")
+    parser.add_argument("--protocol-version", type=int, default=1)
     parser.add_argument("--max-basic-info-seconds", type=float, default=15.0)
     parser.add_argument("--max-e2e-seconds", type=float, default=25.0)
     args = parser.parse_args()
@@ -269,6 +270,8 @@ def main():
         token,
         "--disable-auto-update",
         "--disable-web-ssh",
+        "--protocol-version",
+        str(args.protocol_version),
         "--max-retries",
         "0",
         "--reconnect-interval",

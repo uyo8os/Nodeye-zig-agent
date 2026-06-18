@@ -66,6 +66,28 @@ test "websocket leaky ping parser accepts numeric task id" {
     try std.testing.expectEqualStrings("example.com:443", msg.ping_target);
 }
 
+test "v2 websocket ping message parses from params" {
+    const msg = try report_ws.parseServerMessage(
+        std.testing.allocator,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"agent.ping\",\"params\":{\"ping_task_id\":11,\"ping_type\":\"http\",\"ping_target\":\"example.com\"}}",
+    );
+    defer msg.deinit(std.testing.allocator);
+    try std.testing.expectEqual(report_ws.ServerMessageKind.ping, msg.kind);
+    try std.testing.expectEqual(@as(u64, 11), msg.ping_task_id);
+    try std.testing.expectEqualStrings("http", msg.ping_type);
+    try std.testing.expectEqualStrings("example.com", msg.ping_target);
+}
+
+test "v2 websocket terminal message parses from params" {
+    const msg = try report_ws.parseServerMessage(
+        std.testing.allocator,
+        "{\"jsonrpc\":\"2.0\",\"method\":\"agent.terminal.request\",\"params\":{\"request_id\":\"term-v2\"}}",
+    );
+    defer msg.deinit(std.testing.allocator);
+    try std.testing.expectEqual(report_ws.ServerMessageKind.terminal, msg.kind);
+    try std.testing.expectEqualStrings("term-v2", msg.request_id);
+}
+
 fn sliceInside(container: []const u8, slice: []const u8) bool {
     const start = @intFromPtr(container.ptr);
     const end = start + container.len;

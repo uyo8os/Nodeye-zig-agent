@@ -25,6 +25,7 @@ pub fn basicInfo(allocator: std.mem.Allocator) !common.BasicInfo {
             .name = try commandFirstLine(allocator, &.{ "sysctl", "-n", "hw.model" }, "Unknown"),
             .architecture = normalizeArch(@tagName(@import("builtin").cpu.arch)),
             .cores = @intCast(std.Thread.getCpuCount() catch 1),
+            .physical_cores = @intCast(sysctlInt("kern.smp.cores") catch 0),
             .usage = 0.001,
         },
         .os_name = try commandJoin(allocator, &.{ "uname", "-sr" }, "FreeBSD"),

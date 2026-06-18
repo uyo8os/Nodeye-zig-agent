@@ -201,7 +201,7 @@ fn startZigPtyWithPrelude(allocator: std.mem.Allocator, use_prelude: bool) !Shel
     const shell_base_raw = std.fs.path.basename(shell_path);
     const shell_base = try allocator.dupeZ(u8, shell_base_raw);
     defer allocator.free(shell_base);
-    const prelude = if (use_prelude) try allocator.dupeZ(u8, "for f in /etc/update-motd.d/*; do [ -x \"$f\" ] && \"$f\"; done; [ -r /etc/motd ] && cat /etc/motd; exec \"$0\"") else null;
+    const prelude = if (use_prelude) try allocator.dupeZ(u8, buildShellPrelude(shell_base_raw)) else null;
     defer if (prelude) |value| allocator.free(value);
     const cwd = try terminalCwdAlloc(allocator);
     defer allocator.free(cwd);
@@ -262,7 +262,7 @@ fn startBsdPtyWithPrelude(allocator: std.mem.Allocator, use_prelude: bool) !Shel
     const shell_base_raw = std.fs.path.basename(shell_path);
     const shell_base = try allocator.dupeZ(u8, shell_base_raw);
     defer allocator.free(shell_base);
-    const prelude = if (use_prelude) try allocator.dupeZ(u8, "for f in /etc/update-motd.d/*; do [ -x \"$f\" ] && \"$f\"; done; [ -r /etc/motd ] && cat /etc/motd; exec \"$0\"") else null;
+    const prelude = if (use_prelude) try allocator.dupeZ(u8, buildShellPrelude(shell_base_raw)) else null;
     defer if (prelude) |value| allocator.free(value);
     var env_arena = std.heap.ArenaAllocator.init(allocator);
     defer env_arena.deinit();
@@ -415,6 +415,12 @@ fn isExecutable(path: []const u8) bool {
     return true;
 }
 
+fn buildShellPrelude(shell_base: []const u8) []const u8 {
+    const motd = "for f in /etc/update-motd.d/*; do [ -e \"$f\" ] && [ -x \"$f\" ] && \"$f\"; done; [ -r /etc/motd ] && cat /etc/motd; exec \"$0\"";
+    if (std.mem.eql(u8, shell_base, "zsh")) return "unsetopt NOMATCH 2>/dev/null; " ++ motd;
+    return motd;
+}
+
 fn terminalEnv(allocator: std.mem.Allocator) !*std.process.Environ.Map {
     var env = try allocator.create(std.process.Environ.Map);
     env.* = if (builtin.os.tag == .windows) try compat.currentEnvMap(allocator) else compat.emptyEnvMap(allocator);
@@ -462,14 +468,30 @@ fn terminalCwdAlloc(allocator: std.mem.Allocator) ![]u8 {
 fn writeUnixFdAll(fd: std.posix.fd_t, bytes: []const u8) !void {
     var offset: usize = 0;
     while (offset < bytes.len) {
-        const rc = std.c.write(@intCast(fd), bytes.ptr + offset, bytes.len - offset);
-        if (rc < 0) {
-            const err = @as(std.posix.E, @enumFromInt(std.c._errno().*));
-            if (err == .INTR) continue;
-            return error.WriteFailed;
-        }
-        offset += @intCast(rc);
+        const written = writeFdOnce(fd, bytes[offset..]) catch |err| switch (err) {
+            error.Interrupted => continue,
+            else => return err,
+        };
+        offset += written;
     }
+}
+
+fn writeFdOnce(fd: std.posix.fd_t, bytes: []const u8) !usize {
+    if (comptime builtin.os.tag == .linux and !builtin.link_libc) {
+        const rc = std.os.linux.write(@intCast(fd), bytes.ptr, bytes.len);
+        return switch (std.os.linux.errno(rc)) {
+            .SUCCESS => rc,
+            .INTR => error.Interrupted,
+            else => error.WriteFailed,
+        };
+    }
+    const rc = std.c.write(@intCast(fd), bytes.ptr, bytes.len);
+    if (rc < 0) {
+        const err = @as(std.posix.E, @enumFromInt(std.c._errno().*));
+        if (err == .INTR) return error.Interrupted;
+        return error.WriteFailed;
+    }
+    return @intCast(rc);
 }
 
 fn readUnixFd(fd: std.posix.fd_t, buf: []u8) !usize {

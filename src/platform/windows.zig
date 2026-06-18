@@ -8,6 +8,8 @@ const report_netstatic = @import("report_netstatic");
 var sample_mutex: compat.Mutex = .{};
 var previous_cpu: ?CpuTimes = null;
 var previous_network: ?NetworkSample = null;
+const unknown_cpu_physical_cores = std.math.maxInt(u32);
+var cached_cpu_physical_cores = std.atomic.Value(u32).init(unknown_cpu_physical_cores);
 
 const FILETIME = extern struct {
     dwLowDateTime: windows.DWORD,
@@ -283,6 +285,7 @@ pub fn basicInfo(allocator: std.mem.Allocator) !common.BasicInfo {
             .name = cpuName(allocator) catch "Unknown",
             .architecture = normalizeArch(@tagName(builtin.cpu.arch)),
             .cores = cpuCoreCount(),
+            .physical_cores = cpuPhysicalCoreCount(allocator) catch 0,
             .usage = 0.001,
         },
         .os_name = osName(allocator) catch "Microsoft Windows",
@@ -383,6 +386,37 @@ pub fn normalizeArch(arch: []const u8) []const u8 {
 
 fn cpuCoreCount() u32 {
     return @intCast(std.Thread.getCpuCount() catch 1);
+}
+
+fn cpuPhysicalCoreCount(allocator: std.mem.Allocator) !u32 {
+    const cached = cached_cpu_physical_cores.load(.acquire);
+    if (cached != unknown_cpu_physical_cores) return cached;
+
+    const output = runPowerShell(
+        allocator,
+        "Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | ForEach-Object { $_.NumberOfCores }",
+        16 * 1024,
+    ) catch {
+        cached_cpu_physical_cores.store(0, .release);
+        return 0;
+    };
+    defer allocator.free(output);
+
+    var total: u32 = 0;
+    var saw_value = false;
+    var lines = std.mem.splitScalar(u8, output, '\n');
+    while (lines.next()) |line_raw| {
+        const line = std.mem.trim(u8, line_raw, " \t\r\n");
+        if (line.len == 0) continue;
+        const value = std.fmt.parseInt(u32, line, 10) catch continue;
+        if (value == 0) continue;
+        total = total +| value;
+        saw_value = true;
+    }
+
+    const result: u32 = if (saw_value) total else 0;
+    cached_cpu_physical_cores.store(result, .release);
+    return result;
 }
 
 fn cpuName(allocator: std.mem.Allocator) ![]const u8 {
@@ -711,28 +745,60 @@ fn gpuName(allocator: std.mem.Allocator) ![]const u8 {
     );
     defer allocator.free(output);
 
-    var list: std.ArrayList([]const u8) = .empty;
-    defer {
-        for (list.items) |item| allocator.free(item);
-        list.deinit(allocator);
-    }
+    var counts: std.ArrayList(GpuNameCount) = .empty;
+    defer deinitGpuNameCounts(allocator, &counts);
 
     var lines = std.mem.splitScalar(u8, output, '\n');
     while (lines.next()) |line_raw| {
-        const line = std.mem.trim(u8, line_raw, " \t\r\n");
-        if (line.len == 0) continue;
-        var seen = false;
-        for (list.items) |item| {
-            if (std.mem.eql(u8, item, line)) {
-                seen = true;
-                break;
-            }
-        }
-        if (!seen) try list.append(allocator, try allocator.dupe(u8, line));
+        try appendGpuNameCount(allocator, &counts, line_raw);
     }
 
-    if (list.items.len == 0) return allocator.dupe(u8, "None");
-    return std.mem.join(allocator, ", ", list.items);
+    return allocFormattedGpuNameCounts(allocator, counts.items);
+}
+
+const GpuNameCount = struct {
+    name: []const u8,
+    count: u32,
+};
+
+fn deinitGpuNameCounts(allocator: std.mem.Allocator, counts: *std.ArrayList(GpuNameCount)) void {
+    for (counts.items) |item| allocator.free(item.name);
+    counts.deinit(allocator);
+}
+
+fn appendGpuNameCount(allocator: std.mem.Allocator, counts: *std.ArrayList(GpuNameCount), name_raw: []const u8) !void {
+    const name = std.mem.trim(u8, name_raw, " \t\r\n");
+    if (name.len == 0 or std.mem.eql(u8, name, "None")) return;
+
+    for (counts.items) |*item| {
+        if (std.mem.eql(u8, item.name, name)) {
+            item.count = item.count +| 1;
+            return;
+        }
+    }
+
+    try counts.append(allocator, .{
+        .name = try allocator.dupe(u8, name),
+        .count = 1,
+    });
+}
+
+fn allocFormattedGpuNameCounts(allocator: std.mem.Allocator, counts: []const GpuNameCount) ![]const u8 {
+    if (counts.len == 0) return allocator.dupe(u8, "None");
+
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(allocator);
+
+    for (counts, 0..) |item, idx| {
+        if (idx != 0) try out.appendSlice(allocator, ", ");
+        if (item.count > 1) {
+            try compat.appendPrint(allocator, &out, "{s} × {d}", .{ item.name, item.count });
+        } else {
+            try compat.appendPrint(allocator, &out, "{s}", .{item.name});
+        }
+    }
+
+    return out.toOwnedSlice(allocator);
 }
 
 fn virtualization(allocator: std.mem.Allocator) ![]const u8 {

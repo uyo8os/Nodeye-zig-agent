@@ -61,14 +61,13 @@ pub fn runCommandDetailed(allocator: std.mem.Allocator, command: []const u8) !Co
 
 fn runCommandDetailedWindows(allocator: std.mem.Allocator, command: []const u8) !CommandResult {
     const work_allocator = std.heap.page_allocator;
-    const wrapped = try std.fmt.allocPrint(
-        work_allocator,
-        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; & {{ {s} }} 2>&1; $code = if ($null -ne $LASTEXITCODE) {{ [int]$LASTEXITCODE }} elseif ($?) {{ 0 }} else {{ 1 }}; exit $code",
-        .{command},
-    );
-    defer work_allocator.free(wrapped);
+    const script_path = try createWindowsTaskScript(work_allocator, command);
+    defer {
+        compat.deleteFileAbsolute(script_path) catch {};
+        work_allocator.free(script_path);
+    }
 
-    const result = try compat.runOutputWindows(work_allocator, &.{ "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", wrapped }, max_command_output_bytes);
+    const result = try compat.runOutputWindows(work_allocator, &.{ "powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path }, max_command_output_bytes);
     defer work_allocator.free(result.stdout);
 
     return .{
@@ -78,29 +77,41 @@ fn runCommandDetailedWindows(allocator: std.mem.Allocator, command: []const u8) 
 }
 
 fn runCommandDetailedPosix(allocator: std.mem.Allocator, command: []const u8) !CommandResult {
-    const shell_command_raw = try std.fmt.allocPrint(allocator, "PATH={s}; export PATH; exec 2>&1; {s}", .{ safe_command_path, command });
-    defer allocator.free(shell_command_raw);
-    const shell_command = try allocator.dupeZ(u8, shell_command_raw);
-    defer allocator.free(shell_command);
     const fds = try compat.pipe();
     errdefer {
         compat.closeFd(fds[0]);
         compat.closeFd(fds[1]);
     }
+    const stdin_fds = try compat.pipe();
+    errdefer {
+        compat.closeFd(stdin_fds[0]);
+        compat.closeFd(stdin_fds[1]);
+    }
     const pid = try compat.fork();
     if (pid == 0) {
         compat.closeFd(fds[0]);
+        compat.closeFd(stdin_fds[1]);
+        compat.dup2(stdin_fds[0], 0) catch std.process.exit(127);
         compat.dup2(fds[1], 1) catch std.process.exit(127);
         compat.dup2(fds[1], 2) catch std.process.exit(127);
+        compat.closeFd(stdin_fds[0]);
         compat.closeFd(fds[1]);
         const shell: [:0]const u8 = "/bin/sh";
-        const arg_c: [:0]const u8 = "-c";
         const env_path: [:0]const u8 = "PATH=" ++ safe_command_path;
-        const argv = [_:null]?[*:0]const u8{ shell.ptr, arg_c.ptr, shell_command.ptr };
+        const arg_s: [:0]const u8 = "-s";
+        const argv = [_:null]?[*:0]const u8{ shell.ptr, arg_s.ptr };
         const envp = [_:null]?[*:0]const u8{env_path.ptr};
         compat.execveZ(shell.ptr, &argv, &envp) catch std.process.exit(127);
     }
+    compat.closeFd(stdin_fds[0]);
     compat.closeFd(fds[1]);
+    const stdin_payload = try std.fmt.allocPrint(allocator, "PATH={s}; export PATH\n{s}\n", .{ safe_command_path, command });
+    defer allocator.free(stdin_payload);
+    writeAllFd(stdin_fds[1], stdin_payload) catch |err| {
+        compat.closeFd(stdin_fds[1]);
+        return err;
+    };
+    compat.closeFd(stdin_fds[1]);
     var out = std.Io.Writer.Allocating.init(allocator);
     errdefer out.deinit();
     var total: usize = 0;
@@ -126,9 +137,9 @@ pub const CommandRunner = *const fn (std.mem.Allocator, *std.process.Environ.Map
 
 fn realCommandRunner(allocator: std.mem.Allocator, env: *std.process.Environ.Map, command: []const u8) !std.process.RunResult {
     const work_allocator = std.heap.smp_allocator;
-    const merged_command = try std.fmt.allocPrint(work_allocator, "exec 2>&1; {s}", .{command});
-    defer work_allocator.free(merged_command);
-    const output = try compat.runOutputIgnoreStderr(work_allocator, &.{ "/bin/sh", "-c", merged_command }, env, max_command_output_bytes);
+    const script = try std.fmt.allocPrint(work_allocator, "exec 2>&1\n{s}\n", .{command});
+    defer work_allocator.free(script);
+    const output = try compat.runOutputWithStdin(work_allocator, &.{ "/bin/sh", "-s" }, env, script, max_command_output_bytes);
     defer work_allocator.free(output.stdout);
     return .{
         .stdout = try allocator.dupe(u8, output.stdout),
@@ -159,7 +170,8 @@ pub fn runCommandDetailedWithRunner(allocator: std.mem.Allocator, command: []con
     };
 }
 
-pub fn uploadExecResult(allocator: std.mem.Allocator, cfg: anytype, task_id: []const u8, command: []const u8) !void {
+pub fn uploadExecResult(allocator: std.mem.Allocator, cfg: anytype, protocol_version: i32, task_id: []const u8, command: []const u8) !void {
+    _ = protocol_version;
     if (task_id.len == 0) return;
     const result = if (cfg.disable_web_ssh)
         try disabledRemoteControlResult(allocator)
@@ -203,6 +215,90 @@ pub fn normalizeCommandOutput(allocator: std.mem.Allocator, output: []const u8) 
         }
     }
     return normalized.toOwnedSlice(allocator);
+}
+
+fn createWindowsTaskScript(allocator: std.mem.Allocator, command: []const u8) ![]const u8 {
+    const temp_dir_result = try windowsTaskTempDir(allocator);
+    const temp_dir = temp_dir_result.path;
+    defer if (temp_dir_result.owned) allocator.free(temp_dir);
+    var seed: u64 = @truncate(@as(u128, @bitCast(compat.nanoTimestamp())));
+    var attempt: usize = 0;
+    while (attempt < 32) : (attempt += 1) {
+        seed +%= 0x9e3779b97f4a7c15;
+        const candidate = try std.fmt.allocPrint(allocator, "{s}\\komari-task-{x}-{d}.ps1", .{ temp_dir, seed, attempt });
+        errdefer allocator.free(candidate);
+        var file = compat.createFileAbsolute(candidate, .{ .exclusive = true, .read = true, .permissions = compat.private_file_permissions }) catch |err| switch (err) {
+            error.PathAlreadyExists => {
+                allocator.free(candidate);
+                continue;
+            },
+            else => return err,
+        };
+        errdefer {
+            file.close(std.Options.debug_io);
+            compat.deleteFileAbsolute(candidate) catch {};
+        }
+        var writer_buf: [1024]u8 = undefined;
+        var writer = compat.fileWriter(file, &writer_buf);
+        try writer.writeAll(&.{ 0xEF, 0xBB, 0xBF });
+        try writer.writeAll("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n");
+        try writer.writeAll(command);
+        try writer.flush();
+        file.close(std.Options.debug_io);
+        return candidate;
+    }
+    return error.FileBusy;
+}
+
+const TempDirResult = struct {
+    path: []const u8,
+    owned: bool,
+};
+
+fn windowsTaskTempDir(allocator: std.mem.Allocator) !TempDirResult {
+    if (builtin.os.tag != .windows) return .{ .path = ".", .owned = false };
+    if (compat.getEnvVarOwned(allocator, "TEMP")) |value| {
+        if (value.len != 0) return .{ .path = value, .owned = true };
+        allocator.free(value);
+    } else |_| {}
+    if (compat.getEnvVarOwned(allocator, "TMP")) |value| {
+        if (value.len != 0) return .{ .path = value, .owned = true };
+        allocator.free(value);
+    } else |_| {}
+    return .{ .path = windowsFallbackTempDir(), .owned = false };
+}
+
+fn windowsFallbackTempDir() []const u8 {
+    return "C:\\Windows\\Temp";
+}
+
+fn writeAllFd(fd: std.posix.fd_t, bytes: []const u8) !void {
+    var offset: usize = 0;
+    while (offset < bytes.len) {
+        const written = writeFdOnce(fd, bytes[offset..]) catch |err| switch (err) {
+            error.Interrupted => continue,
+            else => return err,
+        };
+        offset += written;
+    }
+}
+
+fn writeFdOnce(fd: std.posix.fd_t, bytes: []const u8) !usize {
+    if (comptime builtin.os.tag == .linux and !builtin.link_libc) {
+        const rc = std.os.linux.write(@intCast(fd), bytes.ptr, bytes.len);
+        return switch (std.os.linux.errno(rc)) {
+            .SUCCESS => rc,
+            .INTR => error.Interrupted,
+            else => error.WriteFailed,
+        };
+    }
+    const rc = std.c.write(@intCast(fd), bytes.ptr, bytes.len);
+    if (rc < 0) {
+        const err = @as(std.posix.E, @enumFromInt(std.c._errno().*));
+        if (err == .INTR) return error.Interrupted;
+        return error.WriteFailed;
+    }
+    return @intCast(rc);
 }
 
 fn exitCode(term: std.process.Child.Term) i32 {
