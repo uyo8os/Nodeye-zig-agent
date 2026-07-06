@@ -98,7 +98,7 @@ wget -O- https://raw.githubusercontent.com/uyo8os/Nodeye-zig-agent/main/install.
 卸载与管理：
 
 ```
-bash <(curl -sL https://raw.githubusercontent.com/uyo8os/Nodeye-zig-agent/main/Nodeye-agent-menu.sh)
+bash <(curl -sL https://raw.githubusercontent.com/uyo8os/Nodeye-zig-agent/main/Nodeye-zig-agent-menu.sh)
 ```
 
 国内网络或无法直连 `raw.githubusercontent.com` 时，可先用镜像拉取安装脚本。`jsDelivr` 适合拉取仓库静态文件；GitHub 代理可按实际网络择一：
