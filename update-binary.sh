@@ -1,18 +1,18 @@
 #!/bin/sh
 set -eu
 
-repo="luodaoyi/komari-zig-agent"
-service_name="komari-agent"
+repo="uyo8os/Nodeye-zig-agent"
+service_name="Nodeye-agent"
 install_version=""
 github_proxy=""
-github_proxy_list="${KOMARI_GITHUB_PROXIES:-https://gh.llkk.cc https://gh-proxy.com https://ghproxy.net https://ghfast.top https://ghproxy.cc}"
+github_proxy_list="${NODEYE_GITHUB_PROXIES:-https://gh.llkk.cc https://gh-proxy.com https://ghproxy.net https://ghfast.top https://ghproxy.cc}"
 binary_path=""
-install_dir="/opt/komari"
+install_dir="/opt/Nodeye"
 tmp=""
-download_connect_timeout="${KOMARI_DOWNLOAD_CONNECT_TIMEOUT:-8}"
-download_max_time="${KOMARI_DOWNLOAD_MAX_TIME:-20}"
-download_low_speed_limit="${KOMARI_DOWNLOAD_LOW_SPEED_LIMIT:-1024}"
-download_low_speed_time="${KOMARI_DOWNLOAD_LOW_SPEED_TIME:-10}"
+download_connect_timeout="${NODEYE_DOWNLOAD_CONNECT_TIMEOUT:-8}"
+download_max_time="${NODEYE_DOWNLOAD_MAX_TIME:-20}"
+download_low_speed_limit="${NODEYE_DOWNLOAD_LOW_SPEED_LIMIT:-1024}"
+download_low_speed_time="${NODEYE_DOWNLOAD_LOW_SPEED_TIME:-10}"
 
 log() { printf '%s\n' "$*"; }
 err() { printf 'ERROR: %s\n' "$*" >&2; }
@@ -262,7 +262,7 @@ find_initd_binary() {
   [ -f "$script" ] || return 1
   value="$(sed -n 's/.*PROG="\([^"]*\)".*/\1/p; s/.*command="\([^"]*\)".*/\1/p; s/.*procname="\([^"]*\)".*/\1/p' "$script" | head -n 1)"
   if [ -z "$value" ]; then
-    value="$(grep -Eo '/[^" ]*/(agent|komari-agent)' "$script" 2>/dev/null | head -n 1 || true)"
+    value="$(grep -Eo '/[^" ]*/(agent|Nodeye-agent)' "$script" 2>/dev/null | head -n 1 || true)"
   fi
   [ -n "$value" ] || return 1
   printf '%s\n' "$value"
@@ -275,7 +275,7 @@ find_binary() {
   fi
   find_systemd_binary && return
   find_initd_binary && return
-  if command -v komari-agent >/dev/null 2>&1; then command -v komari-agent; return; fi
+  if command -v Nodeye-agent >/dev/null 2>&1; then command -v Nodeye-agent; return; fi
   if command -v agent >/dev/null 2>&1; then command -v agent; return; fi
   printf '%s\n' "${install_dir}/agent"
 }
@@ -319,7 +319,7 @@ service_healthy() {
   return 0
 }
 
-asset="komari-agent-${os_name}-${arch}"
+asset="Nodeye-agent-${os_name}-${arch}"
 if [ -n "$install_version" ]; then
   release_path="download/${install_version}"
 else

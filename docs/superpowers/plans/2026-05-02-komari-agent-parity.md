@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `komari-zig-agent` a drop-in Linux/FreeBSD/macOS replacement for the Go `komari-agent`, with all non-Windows features and wire protocols preserved.
+**Goal:** Make `Nodeye-zig-agent` a drop-in Linux/FreeBSD/macOS replacement for the Go `Nodeye-agent`, with all non-Windows features and wire protocols preserved.
 
 **Architecture:** Keep the public JSON protocol in `src/protocol`, OS collectors in `src/platform`, and long-running agent orchestration in `src/main.zig`. Implement Linux first because it is the live deployment target, then FreeBSD/macOS, then replace temporary child-process HTTP/WebSocket plumbing with native Zig transport.
 
@@ -79,7 +79,7 @@ The Zig agent must preserve these Go agent endpoints and payloads:
 - Modify: `src/config.zig`
 - Modify: `test/config_test.zig`
 
-- [x] Compare `D:\sources\repos-new\gh\komari-agent\cmd\flags\flag.go`, `cmd\root.go`, `cmd\autodiscovery.go`, `cmd\listDisk.go`.
+- [x] Compare `D:\sources\repos-new\gh\Nodeye-agent\cmd\flags\flag.go`, `cmd\root.go`, `cmd\autodiscovery.go`, `cmd\listDisk.go`.
 - [x] Ensure Zig accepts: endpoint, token, interval, max retries, reconnect interval, info report interval, disable web ssh, ignore unsafe cert, include/exclude nics, include mountpoints, month rotate, enable gpu, custom dns, ipv4/ipv6 preference, CF Access headers, host proc.
 - [x] Keep Windows-only warning behavior out of scope.
 - [x] Add `listDisk` equivalent command for Unix.
@@ -101,7 +101,7 @@ The Zig agent must preserve these Go agent endpoints and payloads:
 - [x] Implement virtualization detection from `/proc/1/environ`, `/proc/cpuinfo`, `/sys/class/dmi/id/product_name`, `systemd-detect-virt` only as last optional child process.
 - [ ] Implement GPU name discovery from `nvidia-smi`, `rocm-smi`, `/sys/class/drm`, keeping failure silent.
 - [x] Run: `zig build test`
-- [ ] Run on `ccs2`: `/opt/komari/agent --list-disk` after redeploy when ready.
+- [ ] Run on `ccs2`: `/opt/Nodeye/agent --list-disk` after redeploy when ready.
 - [x] Commit: `feat: complete linux basic info collectors`
 
 ## Task 4: Linux Disk Collector
@@ -340,8 +340,8 @@ The Zig agent must preserve these Go agent endpoints and payloads:
 - Modify: `README.md`
 
 - [ ] Ensure install script detects Linux/FreeBSD/macOS and amd64/arm64/386/arm.
-- [ ] Install to `/opt/komari/agent`.
-- [ ] Create/replace `komari-agent.service` on systemd Linux.
+- [ ] Install to `/opt/Nodeye/agent`.
+- [ ] Create/replace `Nodeye-agent.service` on systemd Linux.
 - [ ] Preserve endpoint/token flags in service.
 - [ ] Build all supported assets in CI.
 - [ ] Upload release artifacts with Go-compatible names where possible.
@@ -354,12 +354,12 @@ The Zig agent must preserve these Go agent endpoints and payloads:
 - No source file expected unless bugs are found.
 
 - [ ] Build linux amd64 release binary.
-- [ ] Upload to `ccs2:/opt/komari/agent.zig-test`.
-- [ ] Stop `komari-agent.service`.
-- [ ] Backup current `/opt/komari/agent`.
-- [ ] Move Zig binary into `/opt/komari/agent`.
+- [ ] Upload to `ccs2:/opt/Nodeye/agent.zig-test`.
+- [ ] Stop `Nodeye-agent.service`.
+- [ ] Backup current `/opt/Nodeye/agent`.
+- [ ] Move Zig binary into `/opt/Nodeye/agent`.
 - [ ] Start service.
-- [ ] Verify `systemctl is-active komari-agent.service`.
+- [ ] Verify `systemctl is-active Nodeye-agent.service`.
 - [ ] Verify RSS and CPU with `ps`.
 - [ ] Verify panel receives non-zero disk/network/connection metrics.
 - [ ] Trigger panel ping task and verify `ping_result`.

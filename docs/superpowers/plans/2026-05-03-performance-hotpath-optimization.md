@@ -38,8 +38,8 @@ git status --short
 zig fmt <touched-files>
 zig build test
 zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSmall -Dversion=dev
-scp zig-out/bin/komari-agent ccs2:/tmp/komari-agent
-ssh ccs2 'set -eu; sudo install -m 0755 /tmp/komari-agent /opt/komari/agent; sudo systemctl restart komari-agent.service; sleep 20; systemctl is-active komari-agent.service; journalctl -u komari-agent.service -n 80 --no-pager'
+scp zig-out/bin/Nodeye-agent ccs2:/tmp/Nodeye-agent
+ssh ccs2 'set -eu; sudo install -m 0755 /tmp/Nodeye-agent /opt/Nodeye/agent; sudo systemctl restart Nodeye-agent.service; sleep 20; systemctl is-active Nodeye-agent.service; journalctl -u Nodeye-agent.service -n 80 --no-pager'
 git add <task-files>
 git commit -m "<message>"
 git push
@@ -48,7 +48,7 @@ git push
 If the service binary path on `ccs2` differs, discover it first:
 
 ```powershell
-ssh ccs2 'systemctl cat komari-agent.service | sed -n "s/^[[:space:]]*ExecStart=[[:space:]]*//p"'
+ssh ccs2 'systemctl cat Nodeye-agent.service | sed -n "s/^[[:space:]]*ExecStart=[[:space:]]*//p"'
 ```
 
 ---
@@ -94,8 +94,8 @@ zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSmall -Dversion=dev
 - [ ] Remote acceptance on `ccs2`.
 
 ```powershell
-scp zig-out/bin/komari-agent ccs2:/tmp/komari-agent
-ssh ccs2 'set -eu; sudo install -m 0755 /tmp/komari-agent /opt/komari/agent; sudo systemctl restart komari-agent.service; sleep 20; systemctl is-active komari-agent.service; journalctl -u komari-agent.service -n 80 --no-pager'
+scp zig-out/bin/Nodeye-agent ccs2:/tmp/Nodeye-agent
+ssh ccs2 'set -eu; sudo install -m 0755 /tmp/Nodeye-agent /opt/Nodeye/agent; sudo systemctl restart Nodeye-agent.service; sleep 20; systemctl is-active Nodeye-agent.service; journalctl -u Nodeye-agent.service -n 80 --no-pager'
 ```
 
 Expected:
@@ -150,8 +150,8 @@ zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSmall -Dversion=dev
 - [ ] Remote acceptance on `ccs2`.
 
 ```powershell
-scp zig-out/bin/komari-agent ccs2:/tmp/komari-agent
-ssh ccs2 'set -eu; sudo install -m 0755 /tmp/komari-agent /opt/komari/agent; sudo systemctl restart komari-agent.service; sleep 30; systemctl is-active komari-agent.service; journalctl -u komari-agent.service -n 100 --no-pager'
+scp zig-out/bin/Nodeye-agent ccs2:/tmp/Nodeye-agent
+ssh ccs2 'set -eu; sudo install -m 0755 /tmp/Nodeye-agent /opt/Nodeye/agent; sudo systemctl restart Nodeye-agent.service; sleep 30; systemctl is-active Nodeye-agent.service; journalctl -u Nodeye-agent.service -n 100 --no-pager'
 ```
 
 Expected:
@@ -208,8 +208,8 @@ zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSmall -Dversion=dev
 - [ ] Remote acceptance on `ccs2`.
 
 ```powershell
-scp zig-out/bin/komari-agent ccs2:/tmp/komari-agent
-ssh ccs2 'set -eu; sudo install -m 0755 /tmp/komari-agent /opt/komari/agent; sudo systemctl restart komari-agent.service; sleep 20; systemctl is-active komari-agent.service; journalctl -u komari-agent.service -n 80 --no-pager'
+scp zig-out/bin/Nodeye-agent ccs2:/tmp/Nodeye-agent
+ssh ccs2 'set -eu; sudo install -m 0755 /tmp/Nodeye-agent /opt/Nodeye/agent; sudo systemctl restart Nodeye-agent.service; sleep 20; systemctl is-active Nodeye-agent.service; journalctl -u Nodeye-agent.service -n 80 --no-pager'
 ```
 
 Expected:
@@ -241,8 +241,8 @@ zig build -Dtarget=x86_64-linux-musl -Doptimize=ReleaseSmall -Dversion=dev
 - [ ] Run final `ccs2` soak.
 
 ```powershell
-scp zig-out/bin/komari-agent ccs2:/tmp/komari-agent
-ssh ccs2 'set -eu; sudo install -m 0755 /tmp/komari-agent /opt/komari/agent; sudo systemctl restart komari-agent.service; sleep 90; systemctl is-active komari-agent.service; journalctl -u komari-agent.service -n 160 --no-pager'
+scp zig-out/bin/Nodeye-agent ccs2:/tmp/Nodeye-agent
+ssh ccs2 'set -eu; sudo install -m 0755 /tmp/Nodeye-agent /opt/Nodeye/agent; sudo systemctl restart Nodeye-agent.service; sleep 90; systemctl is-active Nodeye-agent.service; journalctl -u Nodeye-agent.service -n 160 --no-pager'
 ```
 
 Expected:

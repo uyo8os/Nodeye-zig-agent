@@ -185,7 +185,7 @@ pub fn postJsonReadAuthHeaders(
     defer if (bearer_token.len != 0) allocator.free(authorization);
     var headers = extra_headers;
     if (authorization.len != 0) headers.authorization = authorization;
-    return requestReadWithFamilyHeaders(allocator, ascii_url, "POST", payload, "application/json", cfg, dashboardAddressFamily(cfg), "komari-zig-agent", headers);
+    return requestReadWithFamilyHeaders(allocator, ascii_url, "POST", payload, "application/json", cfg, dashboardAddressFamily(cfg), "Nodeye-zig-agent", headers);
 }
 
 pub fn getRead(allocator: std.mem.Allocator, url: []const u8) ![]u8 {
@@ -202,7 +202,7 @@ pub fn getRead(allocator: std.mem.Allocator, url: []const u8) ![]u8 {
     const result = client.fetch(.{
         .location = .{ .url = ascii_url },
         .method = .GET,
-        .headers = .{ .user_agent = .{ .override = "komari-zig-agent" } },
+        .headers = .{ .user_agent = .{ .override = "Nodeye-zig-agent" } },
         .response_writer = &response_writer.writer,
         .keep_alive = false,
     }) catch |err| {
@@ -248,12 +248,6 @@ pub fn v2RpcUrl(allocator: std.mem.Allocator, endpoint: []const u8, token: []con
     return idna.convertUrlToAscii(allocator, raw);
 }
 
-pub fn taskResultUrl(allocator: std.mem.Allocator, endpoint: []const u8, token: []const u8) ![]const u8 {
-    const raw = try std.fmt.allocPrint(allocator, "{s}/api/clients/task/result?token={s}", .{ trimEndpoint(endpoint), token });
-    defer allocator.free(raw);
-    return idna.convertUrlToAscii(allocator, raw);
-}
-
 pub fn registerUrl(allocator: std.mem.Allocator, endpoint: []const u8, hostname: []const u8) ![]const u8 {
     const escaped = try percentEncode(allocator, hostname);
     defer allocator.free(escaped);
@@ -273,14 +267,6 @@ pub fn reportWsUrlForProtocol(allocator: std.mem.Allocator, endpoint: []const u8
         try std.fmt.allocPrint(allocator, "{s}/api/clients/v2/rpc?token={s}", .{ trimEndpoint(base), token })
     else
         try std.fmt.allocPrint(allocator, "{s}/api/clients/report?token={s}", .{ trimEndpoint(base), token });
-    defer allocator.free(raw);
-    return idna.convertUrlToAscii(allocator, raw);
-}
-
-pub fn terminalWsUrl(allocator: std.mem.Allocator, endpoint: []const u8, token: []const u8, id: []const u8) ![]const u8 {
-    const base = try wsEndpoint(allocator, endpoint);
-    defer allocator.free(base);
-    const raw = try std.fmt.allocPrint(allocator, "{s}/api/clients/terminal?token={s}&id={s}", .{ trimEndpoint(base), token, id });
     defer allocator.free(raw);
     return idna.convertUrlToAscii(allocator, raw);
 }
@@ -432,7 +418,7 @@ fn requestRead(allocator: std.mem.Allocator, url: []const u8, method: []const u8
 }
 
 fn requestReadAuth(allocator: std.mem.Allocator, url: []const u8, method: []const u8, payload: []const u8, content_type: []const u8, cfg: anytype, authorization: []const u8) ![]u8 {
-    return requestReadWithFamilyAuth(allocator, url, method, payload, content_type, cfg, .any, "komari-zig-agent", authorization);
+    return requestReadWithFamilyAuth(allocator, url, method, payload, content_type, cfg, .any, "Nodeye-zig-agent", authorization);
 }
 
 fn requestReadWithFamily(allocator: std.mem.Allocator, url: []const u8, method: []const u8, payload: []const u8, content_type: []const u8, cfg: anytype, family: raw_conn.AddressFamily, user_agent: []const u8) ![]u8 {
@@ -593,7 +579,7 @@ fn requestToFileSha256Once(allocator: std.mem.Allocator, url: []const u8, cfg: a
         var req = std.Io.Writer.Allocating.init(allocator);
         defer req.deinit();
         const request_target = if (raw.proxied_plain) url else path;
-        try req.writer.print("GET {s} HTTP/1.1\r\nHost: {s}\r\nUser-Agent: komari-zig-agent\r\nConnection: close\r\n", .{ request_target, host });
+        try req.writer.print("GET {s} HTTP/1.1\r\nHost: {s}\r\nUser-Agent: Nodeye-zig-agent\r\nConnection: close\r\n", .{ request_target, host });
         if (raw.proxy_authorization) |authorization_value| try req.writer.print("Proxy-Authorization: {s}\r\n", .{authorization_value});
         try req.writer.writeAll("\r\n");
         const request = try req.toOwnedSlice();

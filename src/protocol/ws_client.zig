@@ -196,7 +196,7 @@ fn connectRaw(allocator: std.mem.Allocator, url: []const u8, cfg: anytype) !*Cli
     defer req.deinit();
     const request_target = if (raw_http.proxied_plain) url else target.path;
     try req.writer.print(
-        "GET {s} HTTP/1.1\r\nHost: {s}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {s}\r\nSec-WebSocket-Version: 13\r\nUser-Agent: komari-zig-agent\r\n",
+        "GET {s} HTTP/1.1\r\nHost: {s}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {s}\r\nSec-WebSocket-Version: 13\r\nUser-Agent: Nodeye-zig-agent\r\n",
         .{ request_target, target.host, nonce },
     );
     if (raw_http.proxy_authorization) |authorization| try req.writer.print("Proxy-Authorization: {s}\r\n", .{authorization});

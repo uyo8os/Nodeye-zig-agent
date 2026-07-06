@@ -28,7 +28,7 @@ test "development builds update to stable releases" {
 test "self update asset name matches release assets" {
     const name = try update.assetName(std.testing.allocator);
     defer std.testing.allocator.free(name);
-    try std.testing.expect(std.mem.startsWith(u8, name, "komari-agent-"));
+    try std.testing.expect(std.mem.startsWith(u8, name, "Nodeye-agent-"));
     try std.testing.expect(std.mem.count(u8, name, "-") >= 2);
 }
 
@@ -74,7 +74,7 @@ test "self update downloads release assets through proxy using real http" {
     defer std.testing.allocator.free(proxy);
     const digest = (try update.downloadGithubUrlToFileViaProxyListForTest(
         std.testing.allocator,
-        "https://github.com/luodaoyi/komari-zig-agent/releases/download/v0.1.17/komari-agent-linux-amd64",
+        "https://github.com/uyo8os/Nodeye-zig-agent/releases/download/v0.1.17/Nodeye-agent-linux-amd64",
         file,
         &.{proxy},
     )).?;
@@ -90,16 +90,16 @@ test "self update downloads release assets through proxy using real http" {
 
 test "self update checksum file parser accepts common formats" {
     const sums =
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  komari-agent-linux-amd64\n" ++
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb *komari-agent-linux-arm64\n";
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  Nodeye-agent-linux-amd64\n" ++
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb *Nodeye-agent-linux-arm64\n";
 
     try std.testing.expectEqualStrings(
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        update.checksumFromSums(sums, "komari-agent-linux-amd64").?,
+        update.checksumFromSums(sums, "Nodeye-agent-linux-amd64").?,
     );
     try std.testing.expectEqualStrings(
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        update.checksumFromSums(sums, "komari-agent-linux-arm64").?,
+        update.checksumFromSums(sums, "Nodeye-agent-linux-arm64").?,
     );
     try std.testing.expect(update.checksumFromSums(sums, "missing") == null);
 }
@@ -113,7 +113,7 @@ test "pending update allows first start then rolls back next unconfirmed start" 
     var state = update.PendingUpdateState{
         .previous_version = "v0.1.2",
         .target_version = "v0.1.3",
-        .backup_path = "/opt/komari/agent.bak",
+        .backup_path = "/opt/Nodeye/agent.bak",
         .attempts = 0,
     };
 
@@ -139,7 +139,7 @@ test "pending update state roundtrips json" {
     const state = update.PendingUpdateState{
         .previous_version = "v0.1.2",
         .target_version = "v0.1.3",
-        .backup_path = "/opt/komari/agent.bak",
+        .backup_path = "/opt/Nodeye/agent.bak",
         .attempts = 1,
     };
 
@@ -150,6 +150,6 @@ test "pending update state roundtrips json" {
 
     try std.testing.expectEqualStrings("v0.1.2", parsed.previous_version);
     try std.testing.expectEqualStrings("v0.1.3", parsed.target_version);
-    try std.testing.expectEqualStrings("/opt/komari/agent.bak", parsed.backup_path);
+    try std.testing.expectEqualStrings("/opt/Nodeye/agent.bak", parsed.backup_path);
     try std.testing.expectEqual(@as(u32, 1), parsed.attempts);
 }

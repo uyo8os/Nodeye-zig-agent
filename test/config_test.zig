@@ -20,7 +20,7 @@ test "cli aliases parse" {
     defer arena.deinit();
 
     const args = [_][]const u8{
-        "komari-agent", "-t", "tok", "-e", "https://panel.example", "-i", "2.5",
+        "Nodeye-agent", "-t", "tok", "-e", "https://panel.example", "-i", "2.5",
         "-u",           "-r", "7",   "-c", "11",
     };
     const cfg = try config.parseArgs(arena.allocator(), &args);
@@ -37,7 +37,7 @@ test "full go-compatible cli flags parse" {
     defer arena.deinit();
 
     const args = [_][]const u8{
-        "komari-agent",
+        "Nodeye-agent",
         "--auto-discovery",
         "discover-key",
         "--disable-auto-update",
@@ -108,7 +108,7 @@ test "go-style equals cli flags parse" {
     defer arena.deinit();
 
     const args = [_][]const u8{
-        "komari-agent",
+        "Nodeye-agent",
         "--token=tok",
         "--endpoint=https://panel.example",
         "--interval=2.5",
@@ -147,7 +147,7 @@ test "go-style equals bool cli flags parse" {
     defer arena.deinit();
 
     const args = [_][]const u8{
-        "komari-agent",
+        "Nodeye-agent",
         "--disable-auto-update=true",
         "--disable-web-ssh=true",
         "--ignore-unsafe-cert=true",
@@ -178,7 +178,7 @@ test "go-style equals bool cli flags parse false values" {
     defer arena.deinit();
 
     const args = [_][]const u8{
-        "komari-agent",
+        "Nodeye-agent",
         "--disable-auto-update=false",
         "--disable-web-ssh=0",
         "--ignore-unsafe-cert=False",
@@ -206,7 +206,7 @@ test "list-disk subcommand is recognized" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const args = [_][]const u8{ "komari-agent", "list-disk" };
+    const args = [_][]const u8{ "Nodeye-agent", "list-disk" };
     const cfg = try config.parseArgs(arena.allocator(), &args);
     try std.testing.expectEqual(config.Command.list_disk, cfg.command);
 }
@@ -215,7 +215,7 @@ test "check-mem subcommand is recognized" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const args = [_][]const u8{ "komari-agent", "check-mem" };
+    const args = [_][]const u8{ "Nodeye-agent", "check-mem" };
     const cfg = try config.parseArgs(arena.allocator(), &args);
     try std.testing.expectEqual(config.Command.check_mem, cfg.command);
 }
@@ -224,7 +224,7 @@ test "unknown flags are ignored" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const args = [_][]const u8{ "komari-agent", "--future-flag", "x", "--token", "tok" };
+    const args = [_][]const u8{ "Nodeye-agent", "--future-flag", "x", "--token", "tok" };
     const cfg = try config.parseArgs(arena.allocator(), &args);
     try std.testing.expectEqualStrings("tok", cfg.token);
 }
@@ -233,7 +233,7 @@ test "missing cli flag values keep following flags parseable" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    const args = [_][]const u8{ "komari-agent", "--token", "--endpoint", "https://panel.example", "--max-retries" };
+    const args = [_][]const u8{ "Nodeye-agent", "--token", "--endpoint", "https://panel.example", "--max-retries" };
     const cfg = try config.parseArgs(arena.allocator(), &args);
     try std.testing.expectEqualStrings("", cfg.token);
     try std.testing.expectEqualStrings("https://panel.example", cfg.endpoint);
@@ -245,7 +245,7 @@ test "deprecated flags are ignored" {
     defer arena.deinit();
 
     const args = [_][]const u8{
-        "komari-agent", "--autoUpdate", "--memory-mode-available", "--token", "tok",
+        "Nodeye-agent", "--autoUpdate", "--memory-mode-available", "--token", "tok",
     };
     const cfg = try config.parseArgs(arena.allocator(), &args);
     try std.testing.expectEqualStrings("tok", cfg.token);

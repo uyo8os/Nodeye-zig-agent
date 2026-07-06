@@ -87,7 +87,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
     try stdout.print("Komari Agent {s}\nGithub Repo: {s}\n", .{ version.current, update.repo });
 
     if (cfg.endpoint.len == 0 or cfg.token.len == 0) {
-        try stdout.writeAll("Usage: komari-agent --endpoint <url> --token <token>\n");
+        try stdout.writeAll("Usage: Nodeye-agent --endpoint <url> --token <token>\n");
         return;
     }
 

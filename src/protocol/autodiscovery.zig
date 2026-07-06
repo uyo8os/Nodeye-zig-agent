@@ -84,7 +84,7 @@ pub fn systemHostname(allocator: std.mem.Allocator) ![]u8 {
         allocator.free(hostname);
     } else |_| {}
     if (readTrimmedFile(allocator, "/etc/hostname")) |hostname| return hostname else |_| {}
-    return allocator.dupe(u8, "komari-agent");
+    return allocator.dupe(u8, "Nodeye-agent");
 }
 
 fn posixHostname(allocator: std.mem.Allocator) !?[]u8 {

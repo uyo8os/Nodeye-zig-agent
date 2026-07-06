@@ -146,17 +146,17 @@ jobs:
           set -eu
           zig build -Doptimize=ReleaseSmall -Dversion=${{ needs.prepare.outputs.tag }} -Dtarget=${{ matrix.target }}
           mkdir -p dist
-          binary="komari-agent"
-          asset="komari-agent-${{ matrix.os }}-${{ matrix.arch }}"
+          binary="Nodeye-agent"
+          asset="Nodeye-agent-${{ matrix.os }}-${{ matrix.arch }}"
           if [ "${{ matrix.os }}" = "windows" ]; then
-            binary="komari-agent.exe"
+            binary="Nodeye-agent.exe"
             asset="${asset}.exe"
           fi
           cp "zig-out/bin/${binary}" "dist/${asset}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: komari-agent-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/komari-agent-${{ matrix.os }}-${{ matrix.arch }}*
+          name: Nodeye-agent-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/Nodeye-agent-${{ matrix.os }}-${{ matrix.arch }}*
           if-no-files-found: error
 
   publish:
@@ -179,8 +179,8 @@ jobs:
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --title "$TAG" --generate-notes
           fi
-          (cd dist && sha256sum komari-agent-* > SHA256SUMS)
-          gh release upload "$TAG" dist/komari-agent-* dist/SHA256SUMS --clobber
+          (cd dist && sha256sum Nodeye-agent-* > SHA256SUMS)
+          gh release upload "$TAG" dist/Nodeye-agent-* dist/SHA256SUMS --clobber
 
   fanout:
     runs-on: ubuntu-latest

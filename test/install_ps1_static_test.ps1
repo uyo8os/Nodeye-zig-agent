@@ -13,12 +13,12 @@ if ($errors.Count -gt 0) {
 
 $Text = Get-Content -Raw -Path $Script
 $Required = @(
-    'luodaoyi/komari-zig-agent',
+    'uyo8os/Nodeye-zig-agent',
     '--install-dir',
     '--install-service-name',
     '--install-ghproxy',
     '--install-version',
-    'komari-agent-windows-$Arch.exe',
+    'Nodeye-agent-windows-$Arch.exe',
     'SHA256SUMS',
     'latest/download',
     'nssm.exe',

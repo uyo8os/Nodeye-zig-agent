@@ -6,7 +6,7 @@ New-Item -ItemType Directory -Force -Path build | Out-Null
 function Build-One($os, $arch, $target, $ext = "") {
     Write-Host "Building $os/$arch"
     zig build -Doptimize=ReleaseSmall "-Dversion=$version" "-Dtarget=$target"
-    Copy-Item "zig-out/bin/komari-agent$ext" "build/komari-agent-$os-$arch$ext" -Force
+    Copy-Item "zig-out/bin/Nodeye-agent$ext" "build/Nodeye-agent-$os-$arch$ext" -Force
 }
 
 Build-One linux amd64 x86_64-linux-musl

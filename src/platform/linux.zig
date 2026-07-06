@@ -477,7 +477,7 @@ fn virtualization(allocator: std.mem.Allocator) ![]const u8 {
     }
     if (has_containerenv) return allocator.dupe(u8, "container");
     if (fileExists("/dev/.lxc-boot-id")) return allocator.dupe(u8, "lxc");
-    if (fileExists("/.komari-agent-container")) return allocator.dupe(u8, "container");
+    if (fileExists("/.Nodeye-agent-container")) return allocator.dupe(u8, "container");
 
     const product = try readFirstLine(allocator, "/sys/class/dmi/id/product_name");
     defer allocator.free(product);

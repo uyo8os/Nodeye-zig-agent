@@ -32,7 +32,7 @@ test "basic info v2 upload sends rpc request and accepts response" {
     try std.testing.expectEqual(@as(usize, 1), completed.requests.len);
     const request = completed.requests[0];
     try std.testing.expectEqualStrings("POST /api/clients/v2/rpc?token=tok HTTP/1.1", request.requestLine());
-    try std.testing.expectEqualStrings("komari-zig-agent", request.header("User-Agent").?);
+    try std.testing.expectEqualStrings("Nodeye-zig-agent", request.header("User-Agent").?);
     try std.testing.expectEqualStrings("application/json", request.header("Content-Type").?);
     try std.testing.expect(request.header("Content-Encoding") == null);
 

@@ -7,7 +7,6 @@ const provider = @import("../platform/provider.zig");
 const report = @import("../report/report.zig");
 const ping = @import("ping.zig");
 const task = @import("task.zig");
-const terminal = @import("../terminal/terminal.zig");
 const update = @import("../update.zig");
 const v2 = @import("v2.zig");
 const v2_state = @import("v2_state.zig");
@@ -325,47 +324,12 @@ fn handleServerMessage(allocator: std.mem.Allocator, conn: *ws_client.Client, cf
             const thread = try std.Thread.spawn(.{ .stack_size = thread_stacks.tls_worker_stack_size }, runPingTask, .{ allocator, args });
             thread.detach();
         },
-        .exec => {
-            const args = try ExecTaskArgs.init(allocator, cfg, msg);
-            errdefer args.deinit(allocator);
-            const thread = try std.Thread.spawn(.{}, runExecTask, .{ allocator, args });
-            thread.detach();
-        },
-        .terminal => {
-            const args = try TerminalTaskArgs.init(allocator, cfg, msg);
-            errdefer args.deinit(allocator);
-            const thread = try std.Thread.spawn(.{ .stack_size = thread_stacks.terminal_worker_stack_size }, runTerminalTask, .{ allocator, args });
-            thread.detach();
-        },
+        // Remote command execution and web terminal (SSH) control have been
+        // removed. Any such server requests are ignored.
+        .exec, .terminal => {},
         .message, .event => {},
         .unknown => {},
     }
-}
-
-const TerminalTaskArgs = struct {
-    cfg: config.Config,
-    request_id: []const u8,
-
-    fn init(allocator: std.mem.Allocator, cfg: config.Config, msg: ServerMessage) !TerminalTaskArgs {
-        return .{
-            .cfg = cfg,
-            .request_id = try allocator.dupe(u8, msg.request_id),
-        };
-    }
-
-    fn deinit(self: TerminalTaskArgs, allocator: std.mem.Allocator) void {
-        allocator.free(self.request_id);
-    }
-};
-
-fn runTerminalTask(allocator: std.mem.Allocator, args: TerminalTaskArgs) void {
-    defer args.deinit(allocator);
-    terminal.startSession(allocator, args.cfg, args.request_id) catch |err| {
-        var stdout_buf: [4096]u8 = undefined;
-        var stdout = compat.fileWriter(std.Io.File.stdout(), &stdout_buf);
-        defer stdout.flush() catch {};
-        stdout.print("Terminal session failed: {s}\n", .{@errorName(err)}) catch {};
-    };
 }
 
 const PingTaskArgs = struct {
@@ -414,30 +378,6 @@ fn runPingTask(allocator: std.mem.Allocator, args: PingTaskArgs) void {
     }
 }
 
-const ExecTaskArgs = struct {
-    cfg: config.Config,
-    task_id: []const u8,
-    command: []const u8,
-
-    fn init(allocator: std.mem.Allocator, cfg: config.Config, msg: ServerMessage) !ExecTaskArgs {
-        return .{
-            .cfg = cfg,
-            .task_id = try allocator.dupe(u8, msg.task_id),
-            .command = try allocator.dupe(u8, msg.command),
-        };
-    }
-
-    fn deinit(self: ExecTaskArgs, allocator: std.mem.Allocator) void {
-        allocator.free(self.task_id);
-        allocator.free(self.command);
-    }
-};
-
-fn runExecTask(allocator: std.mem.Allocator, args: ExecTaskArgs) void {
-    defer args.deinit(allocator);
-    task.uploadExecResult(allocator, args.cfg, v2_state.uploadProtocolVersion(), args.task_id, args.command) catch {};
-}
-
 fn postV2ReportOnce(allocator: std.mem.Allocator, cfg: config.Config) !void {
     const snap = try provider.snapshotWithOptions(snapshotOptions(cfg));
     const payload = try report.allocReportJson(allocator, snap);
@@ -461,7 +401,7 @@ fn postV2PullOnce(allocator: std.mem.Allocator, cfg: config.Config) !void {
     const request_id = try std.fmt.allocPrint(allocator, "pull-{d}", .{compat.nanoTimestamp()});
     defer allocator.free(request_id);
     const request = try v2.allocPullRequest(allocator, request_id, .{
-        .capabilities = &.{ "exec", "ping", "message", "event", "terminal" },
+        .capabilities = &.{ "ping", "message", "event" },
         .ack_event_ids = ack_ids,
     });
     defer allocator.free(request);
@@ -527,16 +467,6 @@ fn processV2ResponseBody(allocator: std.mem.Allocator, cfg: config.Config, body:
 fn processV2Event(allocator: std.mem.Allocator, conn: ?*ws_client.Client, cfg: config.Config, method: []const u8, params: ?std.json.Value, event_id: []const u8) bool {
     if (event_id.len != 0 and !markV2EventSeen(event_id)) return true;
     if (method.len == 0) return false;
-    if (std.mem.eql(u8, method, v2.MethodAgentExec)) {
-        const p = parseV2ExecParams(allocator, params) catch return false;
-        const args = ExecTaskArgs{ .cfg = cfg, .task_id = p.task_id, .command = p.command };
-        const thread = std.Thread.spawn(.{}, runExecTask, .{ allocator, args }) catch {
-            args.deinit(allocator);
-            return false;
-        };
-        thread.detach();
-        return true;
-    }
     if (std.mem.eql(u8, method, v2.MethodAgentPing)) {
         const p = parseV2PingParams(allocator, params) catch return false;
         if (conn) |ws| ws.acquire();
@@ -555,28 +485,10 @@ fn processV2Event(allocator: std.mem.Allocator, conn: ?*ws_client.Client, cfg: c
         thread.detach();
         return true;
     }
-    if (std.mem.eql(u8, method, v2.MethodAgentTerminal)) {
-        const request_id = parseV2TerminalRequestId(allocator, params) catch return false;
-        const args = TerminalTaskArgs{ .cfg = cfg, .request_id = request_id };
-        const thread = std.Thread.spawn(.{ .stack_size = thread_stacks.terminal_worker_stack_size }, runTerminalTask, .{ allocator, args }) catch {
-            args.deinit(allocator);
-            return false;
-        };
-        thread.detach();
-        return true;
-    }
     if (std.mem.eql(u8, method, v2.MethodAgentMessage) or std.mem.eql(u8, method, v2.MethodAgentEvent)) {
         return true;
     }
     return false;
-}
-
-fn parseV2ExecParams(allocator: std.mem.Allocator, params: ?std.json.Value) !struct { task_id: []const u8, command: []const u8 } {
-    const object = try expectV2Object(params);
-    return .{
-        .task_id = try dupJsonString(allocator, object, "task_id"),
-        .command = try dupJsonString(allocator, object, "command"),
-    };
 }
 
 fn parseV2PingParams(allocator: std.mem.Allocator, params: ?std.json.Value) !struct { ping_task_id: u64, ping_type: []const u8, ping_target: []const u8 } {
@@ -586,11 +498,6 @@ fn parseV2PingParams(allocator: std.mem.Allocator, params: ?std.json.Value) !str
         .ping_type = try dupJsonString(allocator, object, "ping_type"),
         .ping_target = try dupJsonString(allocator, object, "ping_target"),
     };
-}
-
-fn parseV2TerminalRequestId(allocator: std.mem.Allocator, params: ?std.json.Value) ![]const u8 {
-    const object = try expectV2Object(params);
-    return dupJsonString(allocator, object, "request_id");
 }
 
 fn expectV2Object(params: ?std.json.Value) !std.json.ObjectMap {

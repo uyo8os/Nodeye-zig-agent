@@ -5,8 +5,8 @@ WORKDIR /app
 ARG TARGETOS
 ARG TARGETARCH
 
-COPY komari-agent-${TARGETOS}-${TARGETARCH} /app/komari-agent
-RUN chmod +x /app/komari-agent && touch /.komari-agent-container
+COPY Nodeye-agent-${TARGETOS}-${TARGETARCH} /app/Nodeye-agent
+RUN chmod +x /app/Nodeye-agent && touch /.Nodeye-agent-container
 
-ENTRYPOINT ["/app/komari-agent"]
+ENTRYPOINT ["/app/Nodeye-agent"]
 CMD ["--help"]

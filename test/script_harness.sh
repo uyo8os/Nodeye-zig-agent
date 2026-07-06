@@ -47,7 +47,7 @@ setup_case() {
   FIXTURES="$CASE/fixtures"
   LOG="$CASE/calls.log"
   SERVICE="komari-script-test-$1"
-  ASSET="komari-agent-linux-amd64"
+  ASSET="Nodeye-agent-linux-amd64"
   mkdir -p "$FAKEBIN" "$INSTALL_DIR" "$FIXTURES"
   : > "$LOG"
   TEST_SERVICES="${TEST_SERVICES:-} $SERVICE"
@@ -231,7 +231,7 @@ test_install_direct_success() {
   run_env sh "$ROOT/install.sh" --install-dir "$INSTALL_DIR" --install-service-name "$SERVICE" -e http://server -t token >/dev/null
   [ -x "$INSTALL_DIR/agent" ] &&
     assert_file_contains "/etc/systemd/system/${SERVICE}.service" "ExecStart=$INSTALL_DIR/agent -e http://server -t token" &&
-    assert_file_contains "$LOG" "curl https://github.com/luodaoyi/komari-zig-agent/releases/latest/download/$ASSET" &&
+    assert_file_contains "$LOG" "curl https://github.com/uyo8os/Nodeye-zig-agent/releases/latest/download/$ASSET" &&
     assert_file_not_contains "$LOG" "curl https://gh.llkk.cc/"
 }
 
@@ -239,15 +239,15 @@ test_install_proxy_fallback_success() {
   setup_case install_proxy
   SCRIPT_TEST_DIRECT_BINARY_FAIL=1 run_env sh "$ROOT/install.sh" --install-dir "$INSTALL_DIR" --install-service-name "$SERVICE" -e http://server -t token >/dev/null
   [ -x "$INSTALL_DIR/agent" ] &&
-    assert_file_contains "$LOG" "curl https://gh.llkk.cc/https://github.com/luodaoyi/komari-zig-agent/releases/latest/download/$ASSET"
+    assert_file_contains "$LOG" "curl https://gh.llkk.cc/https://github.com/uyo8os/Nodeye-zig-agent/releases/latest/download/$ASSET"
 }
 
 test_install_slow_direct_switches_to_proxy_once() {
   setup_case install_slow_direct
   SCRIPT_TEST_DIRECT_BINARY_SLOW=1 run_env sh "$ROOT/install.sh" --install-dir "$INSTALL_DIR" --install-service-name "$SERVICE" -e http://server -t token >/dev/null
-  direct_count="$(grep -Fx "curl https://github.com/luodaoyi/komari-zig-agent/releases/latest/download/$ASSET" "$LOG" | wc -l | tr -d ' ')"
+  direct_count="$(grep -Fx "curl https://github.com/uyo8os/Nodeye-zig-agent/releases/latest/download/$ASSET" "$LOG" | wc -l | tr -d ' ')"
   [ "$direct_count" = 1 ] &&
-    assert_file_contains "$LOG" "curl https://gh.llkk.cc/https://github.com/luodaoyi/komari-zig-agent/releases/latest/download/$ASSET" &&
+    assert_file_contains "$LOG" "curl https://gh.llkk.cc/https://github.com/uyo8os/Nodeye-zig-agent/releases/latest/download/$ASSET" &&
     assert_file_contains "$LOG" "--max-time 20" &&
     assert_file_contains "$LOG" "--speed-limit 1024" &&
     assert_file_contains "$LOG" "--speed-time 10"
@@ -257,7 +257,7 @@ test_install_explicit_proxy_success() {
   setup_case install_explicit_proxy
   run_env sh "$ROOT/install.sh" --install-dir "$INSTALL_DIR" --install-service-name "$SERVICE" --install-ghproxy https://proxy.local -e http://server -t token >/dev/null
   [ -x "$INSTALL_DIR/agent" ] &&
-    assert_file_contains "$LOG" "curl https://proxy.local/https://github.com/luodaoyi/komari-zig-agent/releases/latest/download/$ASSET"
+    assert_file_contains "$LOG" "curl https://proxy.local/https://github.com/uyo8os/Nodeye-zig-agent/releases/latest/download/$ASSET"
 }
 
 test_install_checksum_failure() {
@@ -295,7 +295,7 @@ test_replace_proxy_fallback_success() {
   chmod 0755 "$target"
   SCRIPT_TEST_DIRECT_BINARY_FAIL=1 run_env sh "$ROOT/replace.sh" --binary "$target" --service "$SERVICE" >/dev/null
   assert_file_contains "$target" "komari test agent" &&
-    assert_file_contains "$LOG" "curl https://gh.llkk.cc/https://github.com/luodaoyi/komari-zig-agent/releases/latest/download/$ASSET"
+    assert_file_contains "$LOG" "curl https://gh.llkk.cc/https://github.com/uyo8os/Nodeye-zig-agent/releases/latest/download/$ASSET"
 }
 
 test_replace_slow_direct_switches_to_proxy_once() {
@@ -304,10 +304,10 @@ test_replace_slow_direct_switches_to_proxy_once() {
   printf 'old-agent\n' > "$target"
   chmod 0755 "$target"
   SCRIPT_TEST_DIRECT_BINARY_SLOW=1 run_env sh "$ROOT/replace.sh" --binary "$target" --service "$SERVICE" >/dev/null
-  direct_count="$(grep -Fx "curl https://github.com/luodaoyi/komari-zig-agent/releases/latest/download/$ASSET" "$LOG" | wc -l | tr -d ' ')"
+  direct_count="$(grep -Fx "curl https://github.com/uyo8os/Nodeye-zig-agent/releases/latest/download/$ASSET" "$LOG" | wc -l | tr -d ' ')"
   [ "$direct_count" = 1 ] &&
     assert_file_contains "$target" "komari test agent" &&
-    assert_file_contains "$LOG" "curl https://gh.llkk.cc/https://github.com/luodaoyi/komari-zig-agent/releases/latest/download/$ASSET" &&
+    assert_file_contains "$LOG" "curl https://gh.llkk.cc/https://github.com/uyo8os/Nodeye-zig-agent/releases/latest/download/$ASSET" &&
     assert_file_contains "$LOG" "--max-time 20" &&
     assert_file_contains "$LOG" "--speed-limit 1024"
 }
@@ -319,7 +319,7 @@ test_replace_proxy_checksum_fallback_success() {
   chmod 0755 "$target"
   SCRIPT_TEST_DIRECT_BINARY_FAIL=1 SCRIPT_TEST_DIRECT_SUMS_FAIL=1 run_env sh "$ROOT/replace.sh" --binary "$target" --service "$SERVICE" >/dev/null
   assert_file_contains "$target" "komari test agent" &&
-    assert_file_contains "$LOG" "curl https://gh.llkk.cc/https://github.com/luodaoyi/komari-zig-agent/releases/latest/download/SHA256SUMS"
+    assert_file_contains "$LOG" "curl https://gh.llkk.cc/https://github.com/uyo8os/Nodeye-zig-agent/releases/latest/download/SHA256SUMS"
 }
 
 test_replace_checksum_failure_keeps_old() {
@@ -391,10 +391,10 @@ test_update_binary_slow_direct_switches_to_proxy_once() {
   printf 'old-agent\n' > "$target"
   chmod 0755 "$target"
   SCRIPT_TEST_TARGET="$target" SCRIPT_TEST_SYSTEMD_CAT=1 SCRIPT_TEST_DIRECT_BINARY_SLOW=1 run_env sh "$ROOT/update-binary.sh" --binary "$target" --service "$SERVICE" >/dev/null
-  direct_count="$(grep -Fx "curl https://github.com/luodaoyi/komari-zig-agent/releases/latest/download/$ASSET" "$LOG" | wc -l | tr -d ' ')"
+  direct_count="$(grep -Fx "curl https://github.com/uyo8os/Nodeye-zig-agent/releases/latest/download/$ASSET" "$LOG" | wc -l | tr -d ' ')"
   [ "$direct_count" = 1 ] &&
     assert_file_contains "$target" "komari test agent" &&
-    assert_file_contains "$LOG" "curl https://gh.llkk.cc/https://github.com/luodaoyi/komari-zig-agent/releases/latest/download/$ASSET" &&
+    assert_file_contains "$LOG" "curl https://gh.llkk.cc/https://github.com/uyo8os/Nodeye-zig-agent/releases/latest/download/$ASSET" &&
     assert_file_contains "$LOG" "--max-time 20" &&
     assert_file_contains "$LOG" "--speed-limit 1024" &&
     assert_no_backup_files "$INSTALL_DIR"

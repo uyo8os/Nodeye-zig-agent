@@ -37,21 +37,21 @@ jobs:
         run: |
           set -eu
           sudo sysctl -w net.ipv4.ping_group_range='0 2147483647' >/dev/null
-          raw="$(sudo zig-out/bin/komari-agent ping-test icmp 127.0.0.1 '' raw)"
-          auto="$(sudo zig-out/bin/komari-agent ping-test icmp 127.0.0.1)"
+          raw="$(sudo zig-out/bin/Nodeye-agent ping-test icmp 127.0.0.1 '' raw)"
+          auto="$(sudo zig-out/bin/Nodeye-agent ping-test icmp 127.0.0.1)"
           echo "raw=$raw auto=$auto"
           test "$raw" -ge 0
           test "$auto" -ge 0
-          datagram="$(zig-out/bin/komari-agent ping-test icmp 127.0.0.1 '' datagram)"
+          datagram="$(zig-out/bin/Nodeye-agent ping-test icmp 127.0.0.1 '' datagram)"
           echo "datagram=$datagram"
           test "$datagram" -ge 0
       - name: Native mock panel business smoke
         if: runner.os != 'Windows'
-        run: python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent --cf --no-exec
+        run: python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/Nodeye-agent --cf --no-exec
       - name: Native mock panel business smoke (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: python scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent.exe --cf --no-exec
+        run: python scripts/mock_komari_business_e2e.py panel zig-out/bin/Nodeye-agent.exe --cf --no-exec
       - name: Test Windows install script
         if: runner.os == 'Windows'
         shell: pwsh
@@ -153,12 +153,12 @@ jobs:
             pkg install -y curl python3
           run: |
             set -eu
-            zig_dir="$(sh scripts/install_zig_ci.sh "zig-x86_64-freebsd-${{ env.ZIG_VERSION }}.tar.xz" "${{ env.FREEBSD_ZIG_SHA256 }}" "github-komari-zig-agent-freebsd-ci")"
+            zig_dir="$(sh scripts/install_zig_ci.sh "zig-x86_64-freebsd-${{ env.ZIG_VERSION }}.tar.xz" "${{ env.FREEBSD_ZIG_SHA256 }}" "github-Nodeye-zig-agent-freebsd-ci")"
             export PATH="$zig_dir:$PATH"
             zig build test
             zig build -Doptimize=ReleaseSmall -Dversion=dev
-            zig-out/bin/komari-agent --show-warning
-            python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent --cf --no-exec
+            zig-out/bin/Nodeye-agent --show-warning
+            python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/Nodeye-agent --cf --no-exec
             zig build -Doptimize=ReleaseSmall -Dversion=dev -Dtarget=x86_64-freebsd
 
   script-harness:
@@ -183,34 +183,34 @@ jobs:
       - name: Build native agent
         run: zig build -Doptimize=ReleaseSmall -Dversion=dev
       - name: Run mock Komari smoke
-        run: python3 scripts/mock_komari_smoke.py zig-out/bin/komari-agent --max-basic-info-seconds 15
+        run: python3 scripts/mock_komari_smoke.py zig-out/bin/Nodeye-agent --max-basic-info-seconds 15
       - name: Run business panel E2E
         run: |
           set -eu
           sudo sysctl -w net.ipv4.ping_group_range='0 2147483647' >/dev/null
           python3 -m py_compile scripts/mock_komari_business_e2e.py
           python3 -m py_compile scripts/mock_komari_v2_e2e.py
-          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent --cf --no-exec
-          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent
-          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent --terminal --no-exec
-          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent --autodiscovery --no-exec
-          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent --proxy --no-exec
-          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent --custom-dns --no-exec
-          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/komari-agent --no-exec --sudo-agent --tcp-ping-count 10 --http-ping-count 2 --icmp-ping-count 2
-          python3 scripts/mock_komari_v2_e2e.py ws zig-out/bin/komari-agent --terminal
-          python3 scripts/mock_komari_v2_e2e.py post-fallback zig-out/bin/komari-agent
-          python3 scripts/mock_komari_v2_e2e.py post-recover zig-out/bin/komari-agent
+          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/Nodeye-agent --cf --no-exec
+          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/Nodeye-agent
+          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/Nodeye-agent --terminal --no-exec
+          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/Nodeye-agent --autodiscovery --no-exec
+          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/Nodeye-agent --proxy --no-exec
+          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/Nodeye-agent --custom-dns --no-exec
+          python3 scripts/mock_komari_business_e2e.py panel zig-out/bin/Nodeye-agent --no-exec --sudo-agent --tcp-ping-count 10 --http-ping-count 2 --icmp-ping-count 2
+          python3 scripts/mock_komari_v2_e2e.py ws zig-out/bin/Nodeye-agent --terminal
+          python3 scripts/mock_komari_v2_e2e.py post-fallback zig-out/bin/Nodeye-agent
+          python3 scripts/mock_komari_v2_e2e.py post-recover zig-out/bin/Nodeye-agent
       - name: Run self-update E2E
         run: |
           set -eu
           rm -rf zig-out .zig-cache
           zig build -Doptimize=ReleaseSmall -Dversion=v0.0.1
-          cp zig-out/bin/komari-agent ./komari-agent-old
+          cp zig-out/bin/Nodeye-agent ./Nodeye-agent-old
           rm -rf zig-out .zig-cache
           zig build -Doptimize=ReleaseSmall -Dversion=v9.9.9
-          cp zig-out/bin/komari-agent ./komari-agent-new
-          chmod +x ./komari-agent-old ./komari-agent-new
-          python3 scripts/mock_komari_business_e2e.py self-update --old-agent ./komari-agent-old --new-agent ./komari-agent-new
+          cp zig-out/bin/Nodeye-agent ./Nodeye-agent-new
+          chmod +x ./Nodeye-agent-old ./Nodeye-agent-new
+          python3 scripts/mock_komari_business_e2e.py self-update --old-agent ./Nodeye-agent-old --new-agent ./Nodeye-agent-new
 
   linux-agent-smoke:
     name: Linux Agent Smoke (${{ matrix.name }})
@@ -224,32 +224,32 @@ jobs:
             image: ubuntu:24.04
             platform: linux/amd64
             target: x86_64-linux-musl
-            binary: komari-agent
+            binary: Nodeye-agent
           - name: fedora
             image: fedora:latest
             platform: linux/amd64
             target: x86_64-linux-musl
-            binary: komari-agent
+            binary: Nodeye-agent
           - name: centos-7
             image: quay.io/centos/centos:7
             platform: linux/amd64
             target: x86_64-linux-musl
-            binary: komari-agent
+            binary: Nodeye-agent
           - name: openwrt-x86-64
             image: openwrt/rootfs:x86-64-22.03.2
             platform: linux/amd64
             target: x86_64-linux-musl
-            binary: komari-agent
+            binary: Nodeye-agent
           - name: raspberry-pi-os-arm64
             image: dtcooper/raspberrypi-os:bookworm
             platform: linux/arm64
             target: aarch64-linux-musl
-            binary: komari-agent
+            binary: Nodeye-agent
           - name: synology-dsm-linux-amd64-profile
             image: debian:12-slim
             platform: linux/amd64
             target: x86_64-linux-musl
-            binary: komari-agent
+            binary: Nodeye-agent
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       - name: Enable foreign Linux containers
@@ -269,10 +269,10 @@ jobs:
       - name: Run appliance image smoke
         run: |
           set -eu
-          docker run --platform "${{ matrix.platform }}" --rm -v "$PWD/${{ matrix.binary }}:/komari-agent:ro" "${{ matrix.image }}" /bin/sh -c '
+          docker run --platform "${{ matrix.platform }}" --rm -v "$PWD/${{ matrix.binary }}:/Nodeye-agent:ro" "${{ matrix.image }}" /bin/sh -c '
             set -eu
             log="$(mktemp)"
-            /komari-agent --endpoint http://127.0.0.1:1 --token smoke --disable-auto-update --max-retries 0 --reconnect-interval 1 >"$log" 2>&1 &
+            /Nodeye-agent --endpoint http://127.0.0.1:1 --token smoke --disable-auto-update --max-retries 0 --reconnect-interval 1 >"$log" 2>&1 &
             pid="$!"
             found=0
             i=0
@@ -347,13 +347,13 @@ jobs:
         run: |
           set -eu
           zig build -Doptimize=ReleaseSmall -Dversion=dev -Dtarget=${{ matrix.target }}
-          cp zig-out/bin/komari-agent ./komari-agent
-          chmod +x ./komari-agent
+          cp zig-out/bin/Nodeye-agent ./Nodeye-agent
+          chmod +x ./Nodeye-agent
           if [ "${{ matrix.runner }}" = "direct" ]; then
-            ./komari-agent --show-warning
+            ./Nodeye-agent --show-warning
           else
             command -v "${{ matrix.runner }}"
-            "${{ matrix.runner }}" ./komari-agent --show-warning
+            "${{ matrix.runner }}" ./Nodeye-agent --show-warning
           fi
 
   build:
@@ -434,15 +434,15 @@ jobs:
           set -eu
           zig build -Doptimize=ReleaseSmall -Dversion=dev -Dtarget=${{ matrix.target }}
           mkdir -p dist
-          binary="komari-agent"
-          asset="komari-agent-${{ matrix.os }}-${{ matrix.arch }}"
+          binary="Nodeye-agent"
+          asset="Nodeye-agent-${{ matrix.os }}-${{ matrix.arch }}"
           if [ "${{ matrix.os }}" = "windows" ]; then
-            binary="komari-agent.exe"
+            binary="Nodeye-agent.exe"
             asset="${asset}.exe"
           fi
           cp "zig-out/bin/${binary}" "dist/${asset}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: komari-agent-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/komari-agent-${{ matrix.os }}-${{ matrix.arch }}*
+          name: Nodeye-agent-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/Nodeye-agent-${{ matrix.os }}-${{ matrix.arch }}*
           if-no-files-found: error

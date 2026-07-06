@@ -552,7 +552,7 @@ class UpdateHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     new_agent = b""
     sha = ""
-    asset_name = "komari-agent-linux-amd64"
+    asset_name = "Nodeye-agent-linux-amd64"
 
     def log_message(self, fmt, *args):
         return
@@ -587,7 +587,7 @@ class UpdateHandler(BaseHTTPRequestHandler):
 
 def run_self_update_e2e(args):
     with tempfile.TemporaryDirectory(prefix="komari-update-e2e-") as tmp:
-        old_path = os.path.join(tmp, "komari-agent")
+        old_path = os.path.join(tmp, "Nodeye-agent")
         shutil.copy2(args.old_agent, old_path)
         os.chmod(old_path, 0o755)
         with open(args.new_agent, "rb") as fh:
@@ -597,7 +597,7 @@ def run_self_update_e2e(args):
         server = ThreadingHTTPServer(("127.0.0.1", 0), UpdateHandler)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         env = os.environ.copy()
-        env["KOMARI_RELEASE_API_URL"] = f"http://127.0.0.1:{server.server_address[1]}/release/latest"
+        env["NODEYE_RELEASE_API_URL"] = f"http://127.0.0.1:{server.server_address[1]}/release/latest"
         try:
             first = subprocess.run([
                 old_path, "--endpoint", f"http://127.0.0.1:{server.server_address[1]}",
@@ -656,7 +656,7 @@ def run_self_update_e2e(args):
             if version.returncode != 0 or "Komari Agent v9.9.9" not in version.stdout:
                 raise RuntimeError(f"updated binary version check failed: {version.returncode}\n{version.stdout}")
 
-            rollback_path = os.path.join(tmp, "komari-agent-rollback")
+            rollback_path = os.path.join(tmp, "Nodeye-agent-rollback")
             shutil.copy2(args.new_agent, rollback_path)
             os.chmod(rollback_path, 0o755)
             shutil.copy2(args.old_agent, rollback_path + ".bak")

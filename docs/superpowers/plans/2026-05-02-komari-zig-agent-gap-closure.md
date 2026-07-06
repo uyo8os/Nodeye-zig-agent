@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Close the remaining protocol and feature parity gaps against the Go `komari-agent` for Linux, FreeBSD, and macOS.
+**Goal:** Close the remaining protocol and feature parity gaps against the Go `Nodeye-agent` for Linux, FreeBSD, and macOS.
 
 **Architecture:** Keep the current small Zig stdlib-first design. Add focused helpers for TLS policy, WebSocket headers/reconnect, DNS resolution, memory mode selection, and platform-specific collectors without broad rewrites.
 
@@ -169,7 +169,7 @@ fn basicInfoLoop(allocator: std.mem.Allocator, cfg: config.Config) void {
 Deploy to `ccs2`, then:
 
 ```powershell
-ssh ccs2 'systemctl restart komari-agent.service; sleep 20; journalctl -u komari-agent.service -n 40 --no-pager'
+ssh ccs2 'systemctl restart Nodeye-agent.service; sleep 20; journalctl -u Nodeye-agent.service -n 40 --no-pager'
 ```
 
 Expected: active, report `sent`, no one-shot exit.
@@ -474,8 +474,8 @@ zig build -Dtarget=aarch64-macos -Doptimize=ReleaseSmall -Dversion=dev
 - [ ] Deploy to `ccs2`:
 
 ```powershell
-scp .\zig-out\bin\komari-agent ccs2:/opt/komari/agent.zig-new
-ssh ccs2 'set -e; systemctl stop komari-agent.service; cp /opt/komari/agent /opt/komari/agent.prev-gapfix-$(date +%Y%m%d%H%M%S); install -m 0755 /opt/komari/agent.zig-new /opt/komari/agent; systemctl start komari-agent.service; sleep 20; systemctl is-active komari-agent.service; journalctl -u komari-agent.service -n 30 --no-pager'
+scp .\zig-out\bin\Nodeye-agent ccs2:/opt/Nodeye/agent.zig-new
+ssh ccs2 'set -e; systemctl stop Nodeye-agent.service; cp /opt/Nodeye/agent /opt/Nodeye/agent.prev-gapfix-$(date +%Y%m%d%H%M%S); install -m 0755 /opt/Nodeye/agent.zig-new /opt/Nodeye/agent; systemctl start Nodeye-agent.service; sleep 20; systemctl is-active Nodeye-agent.service; journalctl -u Nodeye-agent.service -n 30 --no-pager'
 ```
 
 Expected:

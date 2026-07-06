@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a Linux, FreeBSD, and macOS Zig replacement for the Go `komari-agent` with protocol, config, install, release, and runtime behavior compatibility.
+**Goal:** Build a Linux, FreeBSD, and macOS Zig replacement for the Go `Nodeye-agent` with protocol, config, install, release, and runtime behavior compatibility.
 
 **Architecture:** Implement the agent as small Zig modules with protocol compatibility tests first. Platform metrics live behind a common interface, while HTTP/WebSocket/report/task/terminal code owns the Komari wire contracts.
 
@@ -128,7 +128,7 @@ pub fn build(b: *std.Build) void {
     opts.addOption([]const u8, "version", version);
 
     const exe = b.addExecutable(.{
-        .name = "komari-agent",
+        .name = "Nodeye-agent",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
@@ -226,7 +226,7 @@ test "cli aliases parse" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const args = [_][]const u8{
-        "komari-agent", "-t", "tok", "-e", "https://panel.example", "-i", "2.5",
+        "Nodeye-agent", "-t", "tok", "-e", "https://panel.example", "-i", "2.5",
         "-u", "-r", "7", "-c", "11",
     };
     const cfg = try config.parseArgs(arena.allocator(), &args);
@@ -241,7 +241,7 @@ test "cli aliases parse" {
 test "unknown flags are ignored" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const args = [_][]const u8{ "komari-agent", "--future-flag", "x", "--token", "tok" };
+    const args = [_][]const u8{ "Nodeye-agent", "--future-flag", "x", "--token", "tok" };
     const cfg = try config.parseArgs(arena.allocator(), &args);
     try std.testing.expectEqualStrings("tok", cfg.token);
 }
@@ -785,7 +785,7 @@ Port Go tests:
 
 - [ ] **Step 2: Implement GitHub release lookup**
 
-Query GitHub release metadata through the shared HTTP client. Select the asset matching `komari-agent-{os}-{arch}`.
+Query GitHub release metadata through the shared HTTP client. Select the asset matching `Nodeye-agent-{os}-{arch}`.
 
 - [ ] **Step 3: Implement replacement**
 
@@ -879,11 +879,11 @@ Use:
 zig build -Doptimize=ReleaseSmall -Dversion="$version" -Dtarget="$target"
 ```
 
-Copy outputs to `build/komari-agent-{os}-{arch}`.
+Copy outputs to `build/Nodeye-agent-{os}-{arch}`.
 
 - [ ] **Step 3: Add Dockerfile**
 
-Use Alpine, copy `komari-agent-${TARGETOS}-${TARGETARCH}` to `/app/komari-agent`, set executable bit, touch `/.komari-agent-container`, and use the same entrypoint/CMD behavior as Go.
+Use Alpine, copy `Nodeye-agent-${TARGETOS}-${TARGETARCH}` to `/app/Nodeye-agent`, set executable bit, touch `/.Nodeye-agent-container`, and use the same entrypoint/CMD behavior as Go.
 
 - [ ] **Step 4: Add README**
 
@@ -929,7 +929,7 @@ Workflow behavior:
 - setup Zig 0.16.0
 - run `zig build test`
 - cross-build supported matrix
-- upload artifacts named `komari-agent-{os}-{arch}`
+- upload artifacts named `Nodeye-agent-{os}-{arch}`
 
 - [ ] **Step 2: Add release workflow**
 
@@ -1091,7 +1091,7 @@ Expected: all pass.
 Run a Linux binary against a real Komari panel or local panel-compatible deployment:
 
 ```bash
-./build/komari-agent-linux-amd64 --endpoint "$KOMARI_ENDPOINT" --token "$KOMARI_TOKEN" --disable-auto-update --interval 1
+./build/Nodeye-agent-linux-amd64 --endpoint "$NODEYE_ENDPOINT" --token "$NODEYE_TOKEN" --disable-auto-update --interval 1
 ```
 
 Verify the panel shows live metrics and that exec, ping, and terminal work when enabled.

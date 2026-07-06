@@ -66,7 +66,7 @@ pub fn assetName(allocator: std.mem.Allocator) ![]const u8 {
         else => @tagName(builtin.cpu.arch),
     };
     const ext = if (builtin.os.tag == .windows) ".exe" else "";
-    return std.fmt.allocPrint(allocator, "komari-agent-{s}-{s}{s}", .{ os, arch, ext });
+    return std.fmt.allocPrint(allocator, "Nodeye-agent-{s}-{s}{s}", .{ os, arch, ext });
 }
 
 pub fn newerThan(current_raw: []const u8, latest_raw: []const u8) bool {
@@ -217,7 +217,7 @@ pub fn checkAndUpdate(allocator: std.mem.Allocator, cfg: config.Config) !void {
 }
 
 fn releaseApiUrl(allocator: std.mem.Allocator) ![]const u8 {
-    if (compat.getEnvVarOwned(allocator, "KOMARI_RELEASE_API_URL")) |value| {
+    if (compat.getEnvVarOwned(allocator, "NODEYE_RELEASE_API_URL")) |value| {
         if (value.len != 0) return value;
         allocator.free(value);
     } else |err| switch (err) {
@@ -354,7 +354,7 @@ fn downloadGithubUrlToFileUnchecked(allocator: std.mem.Allocator, url: []const u
 }
 
 fn tryDownloadGithubUrlViaProxies(allocator: std.mem.Allocator, url: []const u8, cfg: config.Config) !?[]u8 {
-    if (compat.getEnvVarOwned(allocator, "KOMARI_GITHUB_PROXIES")) |env_value| {
+    if (compat.getEnvVarOwned(allocator, "NODEYE_GITHUB_PROXIES")) |env_value| {
         defer allocator.free(env_value);
         var it = std.mem.tokenizeAny(u8, env_value, " ,;\t\r\n");
         return tryDownloadGithubUrlViaProxyIterator(allocator, url, cfg, &it);
@@ -367,7 +367,7 @@ fn tryDownloadGithubUrlViaProxies(allocator: std.mem.Allocator, url: []const u8,
 }
 
 fn tryDownloadGithubUrlToFileViaProxies(allocator: std.mem.Allocator, url: []const u8, cfg: config.Config, file: std.Io.File) !?[32]u8 {
-    if (compat.getEnvVarOwned(allocator, "KOMARI_GITHUB_PROXIES")) |env_value| {
+    if (compat.getEnvVarOwned(allocator, "NODEYE_GITHUB_PROXIES")) |env_value| {
         defer allocator.free(env_value);
         var it = std.mem.tokenizeAny(u8, env_value, " ,;\t\r\n");
         return tryDownloadGithubUrlToFileViaProxyIterator(allocator, url, cfg, file, &it);

@@ -8,7 +8,7 @@ fi
 
 archive_name="$1"
 expected_sha="$2"
-source_name="${3:-github-komari-zig-agent-ci}"
+source_name="${3:-github-Nodeye-zig-agent-ci}"
 mirror_list_url="${ZIG_MIRROR_LIST_URL:-https://ziglang.org/download/community-mirrors.txt}"
 download_connect_timeout="${ZIG_DOWNLOAD_CONNECT_TIMEOUT:-8}"
 download_max_time="${ZIG_DOWNLOAD_MAX_TIME:-120}"

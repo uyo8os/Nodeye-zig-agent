@@ -14,17 +14,17 @@ log_warning() { printf '%b\n' "${YELLOW}[WARNING]${NC} $*"; }
 log_error() { printf '%b\n' "${RED}[ERROR]${NC} $*" >&2; }
 log_config() { printf '%b\n' "${CYAN}[CONFIG]${NC} $*"; }
 
-repo="luodaoyi/komari-zig-agent"
-service_name="komari-agent"
-target_dir="/opt/komari"
+repo="uyo8os/Nodeye-zig-agent"
+service_name="Nodeye-agent"
+target_dir="/opt/Nodeye"
 github_proxy=""
-github_proxy_list="${KOMARI_GITHUB_PROXIES:-https://gh.llkk.cc https://gh-proxy.com https://ghproxy.net https://ghfast.top https://ghproxy.cc}"
+github_proxy_list="${NODEYE_GITHUB_PROXIES:-https://gh.llkk.cc https://gh-proxy.com https://ghproxy.net https://ghfast.top https://ghproxy.cc}"
 install_version=""
 komari_args=""
-download_connect_timeout="${KOMARI_DOWNLOAD_CONNECT_TIMEOUT:-8}"
-download_max_time="${KOMARI_DOWNLOAD_MAX_TIME:-20}"
-download_low_speed_limit="${KOMARI_DOWNLOAD_LOW_SPEED_LIMIT:-1024}"
-download_low_speed_time="${KOMARI_DOWNLOAD_LOW_SPEED_TIME:-10}"
+download_connect_timeout="${NODEYE_DOWNLOAD_CONNECT_TIMEOUT:-8}"
+download_max_time="${NODEYE_DOWNLOAD_MAX_TIME:-20}"
+download_low_speed_limit="${NODEYE_DOWNLOAD_LOW_SPEED_LIMIT:-1024}"
+download_low_speed_time="${NODEYE_DOWNLOAD_LOW_SPEED_TIME:-10}"
 
 os_type="$(uname -s)"
 case "$os_type" in
@@ -329,7 +329,7 @@ download_binary_with_fallback() {
   return 1
 }
 
-asset="komari-agent-${os_name}-${arch}"
+asset="Nodeye-agent-${os_name}-${arch}"
 if [ -n "$install_version" ]; then
   release_path="download/${install_version}"
 else

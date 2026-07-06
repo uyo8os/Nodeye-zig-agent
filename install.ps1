@@ -9,14 +9,14 @@ function Log-Error { param([string]$Message) Write-Host "[ERROR] $Message" -Fore
 function Log-Step { param([string]$Message) Write-Host $Message -ForegroundColor Magenta }
 function Log-Config { param([string]$Message) Write-Host "- $Message" -ForegroundColor White }
 
-$Repo = "luodaoyi/komari-zig-agent"
+$Repo = "uyo8os/Nodeye-zig-agent"
 $InstallDir = Join-Path $Env:ProgramFiles "Komari"
-$ServiceName = "komari-agent"
+$ServiceName = "Nodeye-agent"
 $GitHubProxy = ""
 $InstallVersion = ""
 $KomariArgs = @()
-$GitHubProxyList = if ($Env:KOMARI_GITHUB_PROXIES) {
-    $Env:KOMARI_GITHUB_PROXIES -split "[,;`\s]+" | Where-Object { $_ }
+$GitHubProxyList = if ($Env:NODEYE_GITHUB_PROXIES) {
+    $Env:NODEYE_GITHUB_PROXIES -split "[,;`\s]+" | Where-Object { $_ }
 } else {
     @("https://gh.llkk.cc", "https://gh-proxy.com", "https://ghproxy.net", "https://ghfast.top", "https://ghproxy.cc")
 }
@@ -71,9 +71,9 @@ switch ($ProcessorArch) {
     }
 }
 
-$AgentPath = Join-Path $InstallDir "komari-agent.exe"
+$AgentPath = Join-Path $InstallDir "Nodeye-agent.exe"
 $NssmPath = Join-Path $InstallDir "nssm.exe"
-$Asset = "komari-agent-windows-$Arch.exe"
+$Asset = "Nodeye-agent-windows-$Arch.exe"
 $ReleasePath = if ($InstallVersion) { "download/$InstallVersion" } else { "latest/download" }
 $DownloadUrl = "https://github.com/$Repo/releases/$ReleasePath/$Asset"
 $ChecksumsUrl = "https://github.com/$Repo/releases/$ReleasePath/SHA256SUMS"

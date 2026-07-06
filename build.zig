@@ -6,18 +6,6 @@ pub fn build(b: *std.Build) void {
     const version = b.option([]const u8, "version", "agent version") orelse "0.0.1";
     const coverage = b.option(bool, "coverage", "Run tests through kcov") orelse false;
     const coverage_dir = b.option([]const u8, "coverage-dir", "kcov output directory") orelse "zig-out/coverage";
-    const zigpty_module = if (target.result.os.tag == .linux or target.result.os.tag == .macos) blk: {
-        const mod = b.createModule(.{
-            .root_source_file = b.path("src/third_party/zigpty/lib.zig"),
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-        });
-        if (target.result.os.tag == .linux and target.result.abi != .musl and target.result.abi != .musleabi) {
-            mod.linkSystemLibrary("util", .{});
-        }
-        break :blk mod;
-    } else null;
 
     const opts = b.addOptions();
     opts.addOption([]const u8, "version", version);
@@ -51,7 +39,7 @@ pub fn build(b: *std.Build) void {
     };
 
     const exe = b.addExecutable(.{
-        .name = "komari-agent",
+        .name = "Nodeye-agent",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
@@ -64,7 +52,6 @@ pub fn build(b: *std.Build) void {
     });
     exe.root_module.addOptions("build_options", opts);
     exe.root_module.addImport("runtime", runtime_module);
-    if (zigpty_module) |mod| exe.root_module.addImport("zigpty", mod);
     addCompatImports(exe.root_module, compat_module, net_module);
     exe.root_module.addImport("debug", debug_module);
     if (target.result.os.tag == .linux or target.result.os.tag == .freebsd or target.result.os.tag == .macos) {
@@ -140,7 +127,6 @@ pub fn build(b: *std.Build) void {
         "test/windows_process_test.zig",
         "test/ip_extract_test.zig",
         "test/coverage_test.zig",
-        "src/terminal_test.zig",
         "test/ws_message_test.zig",
         "test/v2_state_test.zig",
         "test/ws_client_test.zig",
@@ -153,8 +139,8 @@ pub fn build(b: *std.Build) void {
     for (test_paths) |test_path| {
         addTest(b, test_step, test_path, target, optimize, opts, version_module, compat_module, net_module, debug_module, coverage, coverage_dir);
     }
-    addStandaloneV2Test(b, test_step, "basic_info_v2_test.zig", target, optimize, opts, compat_module, net_module, debug_module, zigpty_module);
-    addStandaloneV2Test(b, test_step, "report_ws_v2_test.zig", target, optimize, opts, compat_module, net_module, debug_module, zigpty_module);
+    addStandaloneV2Test(b, test_step, "basic_info_v2_test.zig", target, optimize, opts, compat_module, net_module, debug_module);
+    addStandaloneV2Test(b, test_step, "report_ws_v2_test.zig", target, optimize, opts, compat_module, net_module, debug_module);
 }
 
 fn addCompatImports(module: *std.Build.Module, compat_module: *std.Build.Module, net_module: *std.Build.Module) void {
@@ -370,7 +356,6 @@ fn addStandaloneV2Test(
     compat_module: *std.Build.Module,
     net_module: *std.Build.Module,
     debug_module: *std.Build.Module,
-    zigpty_module: ?*std.Build.Module,
 ) void {
     const tests = b.addTest(.{
         .root_module = b.createModule(.{
@@ -402,7 +387,6 @@ fn addStandaloneV2Test(
     });
     addCompatImports(report_netstatic, compat_module, net_module);
     tests.root_module.addImport("report_netstatic", report_netstatic);
-    if (zigpty_module) |mod| tests.root_module.addImport("zigpty", mod);
     if (target.result.os.tag == .windows) {
         tests.root_module.linkSystemLibrary("advapi32", .{});
         tests.root_module.linkSystemLibrary("iphlpapi", .{});

@@ -9,7 +9,7 @@ build_one() {
   ext="${4:-}"
   echo "Building $os/$arch"
   zig build -Doptimize=ReleaseSmall -Dversion="$version" -Dtarget="$target"
-  cp "zig-out/bin/komari-agent$ext" "build/komari-agent-$os-$arch$ext"
+  cp "zig-out/bin/Nodeye-agent$ext" "build/Nodeye-agent-$os-$arch$ext"
 }
 
 build_one linux amd64 x86_64-linux-musl

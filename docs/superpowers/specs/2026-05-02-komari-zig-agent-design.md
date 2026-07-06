@@ -4,7 +4,7 @@ Date: 2026-05-02
 
 ## Goal
 
-Build a Zig implementation of `komari-agent` that can replace the current Go agent for Linux, FreeBSD, and macOS while preserving all public protocols, command-line behavior, configuration keys, installation flow, release assets, and service behavior.
+Build a Zig implementation of `Nodeye-agent` that can replace the current Go agent for Linux, FreeBSD, and macOS while preserving all public protocols, command-line behavior, configuration keys, installation flow, release assets, and service behavior.
 
 Windows support is explicitly out of scope for the first implementation. The project may keep compatible option names and script branches, but it must not publish or claim a working Windows Zig agent until Windows support is implemented.
 
@@ -12,15 +12,15 @@ Windows support is explicitly out of scope for the first implementation. The pro
 
 The compatibility target is the current Go repository at:
 
-`D:\sources\repos-new\gh\komari-agent`
+`D:\sources\repos-new\gh\Nodeye-agent`
 
 The new implementation lives at:
 
-`D:\sources\repos-new\gh\komari-zig-agent`
+`D:\sources\repos-new\gh\Nodeye-zig-agent`
 
 The Zig agent must preserve the behavior that matters to the Komari panel and deployment automation:
 
-- Binary asset names: `komari-agent-{os}-{arch}` for supported Unix-like targets.
+- Binary asset names: `Nodeye-agent-{os}-{arch}` for supported Unix-like targets.
 - CLI flags, short flags, environment variables, and JSON config keys.
 - HTTP endpoints, methods, query parameters, headers, payload fields, and retry behavior.
 - WebSocket endpoints, message types, ping frames, JSON payloads, and terminal stream behavior.
@@ -285,7 +285,7 @@ The new repository must provide:
 - `Dockerfile` compatible with the release asset names.
 - Local build script for cross builds.
 
-The download asset names should stay `komari-agent-{os}-{arch}` so existing installation instructions continue to work.
+The download asset names should stay `Nodeye-agent-{os}-{arch}` so existing installation instructions continue to work.
 
 ## Repository Structure
 

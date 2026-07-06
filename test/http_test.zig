@@ -13,10 +13,6 @@ test "endpoint helpers trim slash and place token query" {
         try http.basicInfoUrl(allocator, "https://panel.example/", "tok"),
     );
     try std.testing.expectEqualStrings(
-        "https://panel.example/api/clients/task/result?token=tok",
-        try http.taskResultUrl(allocator, "https://panel.example/", "tok"),
-    );
-    try std.testing.expectEqualStrings(
         "https://panel.example/api/clients/v2/rpc?token=tok",
         try http.v2RpcUrl(allocator, "https://panel.example/", "tok"),
     );
@@ -42,10 +38,6 @@ test "websocket helpers convert scheme" {
     try std.testing.expectEqualStrings(
         "wss://panel.example/api/clients/v2/rpc?token=tok",
         try http.reportWsUrlForProtocol(allocator, "https://panel.example/", "tok", 2),
-    );
-    try std.testing.expectEqualStrings(
-        "ws://panel.example/api/clients/terminal?token=tok&id=req",
-        try http.terminalWsUrl(allocator, "http://panel.example/", "tok", "req"),
     );
     try std.testing.expectEqualStrings(
         "wspanel.example/api/clients/report?token=tok",
